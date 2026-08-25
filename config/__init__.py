@@ -32,3 +32,19 @@ CLOUDBASE_URL = os.environ.get(
     "MUSICFINDER_CLOUDBASE_URL", "")
 CLOUDBASE_TOKEN = os.environ.get(
     "MUSICFINDER_CLOUDBASE_TOKEN", "")
+
+# ── 构建期密钥注入点（CI 专用，源码/仓库绝不含有任何密钥）────────
+# 打包时，CI 用 GitHub Secrets 生成 config/_build_secrets.py 并写入真实 token，
+# 此处自动覆盖上面的空默认值，使分发的安装包「开箱即用、团队无需任何配置」。
+# 本地开发 / 无该文件时静默跳过，回落到环境变量 / 空默认值。
+try:
+    from config._build_secrets import (  # type: ignore
+        DISCOGS_TOKEN as _DT,
+        CLOUDBASE_URL as _CU,
+        CLOUDBASE_TOKEN as _CT,
+    )
+    DISCOGS_TOKEN = _DT
+    CLOUDBASE_URL = _CU
+    CLOUDBASE_TOKEN = _CT
+except Exception:
+    pass

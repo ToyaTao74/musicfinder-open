@@ -38,6 +38,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller flask openpyxl requests pypinyin pycryptodome
 
+      - name: 注入密钥（仅打包时，源码不含密钥）
+        shell: bash
+        env:
+          CB_URL: ${{ secrets.CLOUDBASE_URL }}
+          CB_TOKEN: ${{ secrets.CLOUDBASE_TOKEN }}
+          DC_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          url = os.environ.get('CB_URL','') or ''
+          tok = os.environ.get('CB_TOKEN','') or ''
+          dc  = os.environ.get('DC_TOKEN','') or ''
+          with open('config/_build_secrets.py','w',encoding='utf-8') as f:
+              f.write('# AUTO-GENERATED at build time, never committed\n')
+              f.write('DISCOGS_TOKEN = ' + repr(dc) + '\n')
+              f.write('CLOUDBASE_URL = ' + repr(url) + '\n')
+              f.write('CLOUDBASE_TOKEN = ' + repr(tok) + '\n')
+          print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
+          PY
+
       - name: Build with PyInstaller
         run: python -m PyInstaller musicfinder_win.spec --noconfirm
 
@@ -69,6 +89,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller flask openpyxl requests pypinyin pycryptodome
+
+      - name: 注入密钥（仅打包时，源码不含密钥）
+        shell: bash
+        env:
+          CB_URL: ${{ secrets.CLOUDBASE_URL }}
+          CB_TOKEN: ${{ secrets.CLOUDBASE_TOKEN }}
+          DC_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          url = os.environ.get('CB_URL','') or ''
+          tok = os.environ.get('CB_TOKEN','') or ''
+          dc  = os.environ.get('DC_TOKEN','') or ''
+          with open('config/_build_secrets.py','w',encoding='utf-8') as f:
+              f.write('# AUTO-GENERATED at build time, never committed\n')
+              f.write('DISCOGS_TOKEN = ' + repr(dc) + '\n')
+              f.write('CLOUDBASE_URL = ' + repr(url) + '\n')
+              f.write('CLOUDBASE_TOKEN = ' + repr(tok) + '\n')
+          print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
+          PY
 
       - name: Build with PyInstaller (fresh, avoid stale bundle)
         run: |

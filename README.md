@@ -30,7 +30,8 @@
    - `MF-<版本>-Mac`（解压得 `MusicFinder.app`）
 3. 双击运行，浏览器自动打开本地管理页面（默认 `http://127.0.0.1:57074`）。
 
-> 安装包内 **不含任何密钥**。Discogs 兜底源与云端同步为可选功能，需自行配置（见下文）。
+> **团队免配置**：若维护者已在仓库 `Settings → Secrets` 配置了 `CLOUDBASE_TOKEN` / `CLOUDBASE_URL` / `DISCOGS_TOKEN`，CI 打包时会自动把团队 Token 烤进安装包——下载后双击即用，无需任何设置。
+> 若未配置 Secrets，则安装包内不含密钥，Discogs 与云端同步需自行配置（见下文）。
 
 ### 方式二：从源码运行（开发者）
 
@@ -57,6 +58,20 @@ python -m PyInstaller musicfinder_mac.spec --noconfirm
 ```
 
 打包配置已声明全部 `hiddenimports`（含 `Crypto`、`pypinyin`、`evidence.*`、`monitor.*`），无需额外操作。
+
+### 维护者：生成「团队免配置」安装包
+
+若要让团队成员**下载后无需任何配置**即可使用 CloudBase 云端同步与 Discogs 厂牌查询，维护者只需：
+
+1. 进入仓库 **Settings → Secrets and variables → Actions → New repository secret**，添加三个密钥（值来自你自己的 CloudBase / Discogs 后台，**不要写进代码**）：
+   - `CLOUDBASE_URL`：你的 CloudBase mark-sync 地址
+   - `CLOUDBASE_TOKEN`：你的 CloudBase 访问令牌
+   - `DISCOGS_TOKEN`：你的 Discogs personal access token
+2. 推送代码或手动触发 **Build MusicFinder**。
+
+CI 会在打包阶段用这些 Secrets 生成临时密钥文件并烤进 `MusicFinder.exe` / `MusicFinder.app`，**源码与仓库历史始终不含任何密钥**。
+
+> ⚠️ 安全提示：烤进安装包的 Token 对拿到安装包的人是**可提取**的。仅当分发对象可信（如内部团队）时才建议开启；若对外完全公开分发，请保持 Secrets 为空，让用户各自配置。
 
 ---
 

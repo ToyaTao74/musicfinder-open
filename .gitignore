@@ -30,6 +30,9 @@ binaries/
 cookies.json
 config.py
 
+# CI 打包时由 GitHub Secrets 生成的临时密钥文件（绝不入库）
+config/_build_secrets.py
+
 # 系统
 .DS_Store
 Thumbs.db
