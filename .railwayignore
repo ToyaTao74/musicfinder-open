@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.tunnel/
+cookies.json
+kugou_probe*.py
+kugou_listen_*.py
+*_GUIDE.md
+login_helper.py
+overview.md

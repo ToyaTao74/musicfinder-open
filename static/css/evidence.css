@@ -1,0 +1,105 @@
+/* ═══════════════════════════════════════════════
+   MusicFinder — 音乐证据监测 样式
+   复用主程序主题变量，light / dark 双套自适应
+   ═══════════════════════════════════════════════ */
+
+.ev-page { padding: 4px 0; }
+
+.ev-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
+.ev-overline { font-size: 12px; color: var(--text-tertiary, #888); letter-spacing: .08em; font-weight: 600; margin: 0 0 2px; }
+.ev-title { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -.02em; color: var(--text-primary, #111); }
+.ev-actions { display: flex; gap: 10px; }
+
+/* 状态横幅：证据台「还差什么」显式提示，避免用户误以为现在能跑出盗版判决 */
+.ev-banner { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border-radius: var(--radius-md, 14px); margin-bottom: 18px; font-size: 13px; line-height: 1.5; }
+.ev-banner.ok { background: rgba(22,163,74,.10); border: 1px solid rgba(22,163,74,.35); color: #15803d; }
+.ev-banner.warn { background: rgba(255,107,0,.10); border: 1px solid rgba(255,107,0,.35); color: #b45309; }
+.ev-banner-title { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.ev-banner ul { margin: 0; padding-left: 20px; }
+.ev-banner li { margin: 2px 0; }
+.ev-banner code { background: rgba(0,0,0,.06); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+.dark .ev-banner code, .ev-banner code { color: inherit; }
+.ev-banner .ev-banner-cta { margin-top: 4px; }
+.ev-banner b { font-weight: 700; }
+
+.ev-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.ev-stat { padding: 18px 20px; border-radius: var(--radius-md, 14px); border: 1px solid var(--glass-border, rgba(0,0,0,.08)); background: var(--glass-bg, #fff); }
+.ev-stat-label { font-size: 12px; color: var(--text-tertiary, #888); font-weight: 600; }
+.ev-stat-value { font-size: 28px; font-weight: 800; margin: 4px 0 2px; color: var(--text-primary, #111); font-variant-numeric: tabular-nums; }
+.ev-stat-value.accent { color: var(--accent, #e63946); }
+.ev-stat-value.warn { color: var(--highlight, #ff6b00); }
+
+.ev-grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
+.ev-col { display: flex; flex-direction: column; gap: 18px; }
+.ev-col-wide { min-width: 0; }
+
+.ev-card { padding: 20px; border-radius: var(--radius-md, 14px); border: 1px solid var(--glass-border, rgba(0,0,0,.08)); background: var(--glass-bg, #fff); }
+.ev-card-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.ev-h2 { font-size: 16px; font-weight: 700; margin: 0 0 10px; color: var(--text-primary, #111); }
+.ev-card-bar .ev-h2 { margin: 0; }
+.ev-hint { font-size: 12px; color: var(--text-secondary, #555); margin: 0 0 12px; }
+
+.ev-label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-secondary, #444); margin-bottom: 12px; }
+.ev-label input, .ev-label select { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--glass-border, rgba(0,0,0,.12)); background: var(--bg-input, #fff); color: var(--text-primary, #111); font-size: 14px; font-weight: 400; }
+.ev-fieldset { border: 1px solid var(--glass-border, rgba(0,0,0,.1)); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
+.ev-fieldset legend { font-size: 12px; color: var(--text-tertiary, #888); padding: 0 6px; }
+.ev-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; margin-right: 14px; }
+
+.ev-msg { display: block; font-size: 12px; color: var(--text-secondary, #555); margin-top: 8px; }
+.ev-msg.ok { color: #16a34a; }
+.ev-msg.err { color: #e63946; }
+
+.ev-task-status { font-size: 13px; color: var(--text-secondary, #555); margin-bottom: 12px; min-height: 20px; }
+.ev-task-status .run { color: var(--accent, #e63946); font-weight: 600; }
+
+.ev-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ev-filters select { padding: 7px 10px; border-radius: 9px; border: 1px solid var(--glass-border, rgba(0,0,0,.12)); background: var(--bg-input, #fff); color: var(--text-primary, #111); font-size: 13px; }
+.ev-filters button { padding: 7px 12px; }
+
+.ev-table-wrap { overflow-x: auto; }
+.ev-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ev-table th, .ev-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--glass-border, rgba(0,0,0,.07)); vertical-align: top; }
+.ev-table th { font-size: 12px; color: var(--text-tertiary, #888); font-weight: 600; position: sticky; top: 0; background: var(--glass-bg, #fff); }
+.ev-table a { color: var(--accent, #e63946); text-decoration: none; word-break: break-all; }
+.ev-table a:hover { text-decoration: underline; }
+.ev-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.ev-pill.q { background: rgba(22,163,74,.14); color: #16a34a; }
+.ev-pill.u { background: rgba(120,120,120,.14); color: #666; }
+.ev-pill.pir-yes { background: rgba(230,57,70,.16); color: #e63946; }
+.ev-pill.pir-no { background: rgba(37,99,235,.14); color: #e07a00; }
+.ev-pill.pir-pend { background: rgba(255,107,0,.14); color: #ff6b00; }
+.ev-empty { text-align: center; color: var(--text-tertiary, #999); padding: 30px 0; }
+
+.button { padding: 9px 16px; border-radius: 10px; border: 1px solid transparent; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s ease; }
+.button.primary { background: var(--accent, #e63946); color: #fff; }
+.button.primary:hover { filter: brightness(1.06); }
+.button.secondary { background: var(--glass-bg, #fff); border-color: var(--glass-border, rgba(0,0,0,.12)); color: var(--text-primary, #111); }
+.button.secondary:hover { border-color: var(--accent, #e63946); }
+.button:disabled { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 900px) { .ev-grid { grid-template-columns: 1fr; } }
+
+/* 横幅内嵌按钮 */
+.ev-banner .ev-inline-btn { margin-top: 8px; align-self: flex-start; }
+.ev-banner .ev-inline-btn + .ev-banner-cta { margin-top: 12px; }
+
+/* 抖音扫码登录弹窗 */
+.ev-modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px; }
+.ev-modal[hidden] { display: none; }
+body.ev-modal-open { overflow: hidden; }
+.ev-modal-card { background: var(--glass-bg, #fff); border-radius: var(--radius-md, 14px); max-width: 520px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.25); max-height: 90vh; overflow-y: auto; }
+.ev-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--glass-border, rgba(0,0,0,.08)); }
+.ev-modal-head h3 { margin: 0; font-size: 17px; font-weight: 700; color: var(--text-primary, #111); }
+.ev-modal-x { background: none; border: 0; font-size: 26px; line-height: 1; cursor: pointer; color: var(--text-tertiary, #888); padding: 0 6px; border-radius: 6px; }
+.ev-modal-x:hover { background: rgba(0,0,0,.06); color: var(--text-primary, #111); }
+.ev-modal-body { padding: 18px 20px 20px; }
+.ev-modal-intro { font-size: 13px; color: var(--text-secondary, #555); margin: 0 0 12px; }
+.ev-modal-note { font-size: 12px; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,.04); margin: 0 0 14px; color: var(--text-secondary, #444); line-height: 1.5; }
+.ev-modal-note code { display: block; margin-top: 6px; padding: 6px 10px; background: rgba(0,0,0,.06); border-radius: 6px; font-size: 11px; word-break: break-all; }
+.ev-modal-steps { font-size: 13px; line-height: 1.7; padding-left: 22px; margin: 0 0 14px; color: var(--text-secondary, #444); }
+.ev-modal-steps b { color: var(--text-primary, #111); }
+.ev-modal-cmd { display: flex; gap: 8px; align-items: stretch; margin-bottom: 14px; }
+.ev-modal-cmd textarea { flex: 1; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--glass-border, rgba(0,0,0,.12)); background: var(--bg-input, #fff); font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--text-primary, #111); resize: vertical; min-height: 64px; }
+.ev-modal-cmd button { white-space: nowrap; align-self: flex-start; }
+.ev-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--glass-border, rgba(0,0,0,.06)); }
+.ev-modal-status { font-size: 13px; color: var(--text-secondary, #555); flex: 1; }

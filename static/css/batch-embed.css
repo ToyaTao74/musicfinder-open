@@ -1,0 +1,485 @@
+/* ═══════════════════════════════════════════════════
+   批量歌单工具页样式（复用 style.css 的玻璃拟态/主题变量）
+   ═══════════════════════════════════════════════════ */
+
+#tab-batch .batch-hero {
+    text-align: center;
+    margin: 8px 0 26px;
+}
+
+#tab-batch .batch-hero .hero-title {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+#tab-batch .batch-hero .hero-subtitle {
+    margin-top: 10px;
+    font-size: 14px;
+    opacity: 0.7;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+}
+
+#tab-batch .nav-links {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#tab-batch .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+#tab-batch .nav-link:hover {
+    color: var(--text-primary, #fff);
+    background: rgba(255,255,255,0.06);
+}
+
+#tab-batch .nav-link.active {
+    color: #fff;
+    background: linear-gradient(135deg, rgba(255,138,0,0.25), rgba(255,107,0,0.25));
+    border: 1px solid rgba(255,138,0,0.4);
+}
+
+#tab-batch .song-input {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid var(--border, rgba(255,255,255,0.12));
+    background: rgba(0,0,0,0.25);
+    color: var(--text-primary, #fff);
+    font-size: 14px;
+    line-height: 1.7;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
+}
+
+#tab-batch .song-input:focus {
+    border-color: rgba(255,138,0,0.6);
+    box-shadow: 0 0 0 3px rgba(255,138,0,0.15);
+}
+
+#tab-batch .input-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+#tab-batch .link-btn {
+    background: none;
+    border: none;
+    color: #3E62AD;
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+#tab-batch .link-btn:hover {
+    background: rgba(96,165,250,0.12);
+}
+
+#tab-batch .input-hint {
+    font-size: 12.5px;
+    opacity: 0.62;
+    line-height: 1.7;
+    margin: 0 0 14px;
+}
+
+#tab-batch .input-hint code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: #93C5FD;
+}
+
+#tab-batch .input-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+#tab-batch .parse-info {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+#tab-batch .count-badge {
+    display: inline-block;
+    min-width: 22px;
+    text-align: center;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #FF8A00, #FF6B00);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+}
+
+#tab-batch .batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+#tab-batch .concurrency-label {
+    font-size: 12.5px;
+    opacity: 0.7;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#tab-batch .mini-select {
+    background: rgba(0,0,0,0.3);
+    color: var(--text-primary, #fff);
+    border: 1px solid var(--border, rgba(255,255,255,0.12));
+    border-radius: 8px;
+    padding: 5px 8px;
+    font-size: 12.5px;
+    outline: none;
+}
+
+#tab-batch .search-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 22px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #FF8A00, #FF6B00);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s;
+    box-shadow: 0 8px 24px rgba(255,138,0,0.35);
+}
+
+#tab-batch .search-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(255,138,0,0.45);
+}
+
+#tab-batch .search-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#tab-batch .progress-wrap {
+    margin: 26px 0;
+    text-align: center;
+}
+
+#tab-batch .progress-bar {
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(255,255,255,0.1);
+    overflow: hidden;
+}
+
+#tab-batch .progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #FF8A00, #FF6B00);
+    transition: width 0.4s ease;
+}
+
+#tab-batch .progress-text {
+    margin-top: 10px;
+    font-size: 13px;
+    opacity: 0.75;
+}
+
+#tab-batch .result-section {
+    margin-top: 30px;
+}
+
+#tab-batch .result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+#tab-batch .result-title {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+#tab-batch .download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 11px;
+    border: 1px solid rgba(255,138,0,0.5);
+    background: rgba(255,138,0,0.14);
+    color: #93C5FD;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#tab-batch .download-btn:hover {
+    background: rgba(255,138,0,0.26);
+    color: #fff;
+}
+
+#tab-batch .table-scroll {
+    overflow-x: auto;
+    border-radius: 14px;
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
+}
+
+#tab-batch .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    background: rgba(0,0,0,0.2);
+}
+
+#tab-batch .results-table th, #tab-batch .results-table td {
+    padding: 9px 11px;
+    text-align: center;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+    border-right: 1px solid rgba(255,255,255,0.05);
+    white-space: nowrap;
+}
+
+#tab-batch .results-table th {
+    background: rgba(255,255,255,0.06);
+    font-weight: 600;
+    font-size: 11.5px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+#tab-batch .results-table .col-song {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: rgba(20,20,30,0.95);
+    z-index: 1;
+    font-weight: 600;
+}
+
+#tab-batch .results-table .col-brand {
+    text-align: left;
+    max-width: 160px;
+    white-space: normal;
+}
+
+#tab-batch .results-table tbody tr:hover td {
+    background: rgba(255,138,0,0.07);
+}
+
+#tab-batch .results-table tbody tr:hover .col-song {
+    background: rgba(35,30,55,0.95);
+}
+
+#tab-batch .tag-exact {
+    color: #34d399;
+    font-weight: 600;
+}
+
+#tab-batch .tag-other {
+    color: #fbbf24;
+    font-weight: 500;
+}
+
+#tab-batch .tag-none {
+    color: rgba(255,255,255,0.4);
+}
+
+#tab-batch .result-note {
+    margin-top: 14px;
+    font-size: 12px;
+    opacity: 0.55;
+    line-height: 1.7;
+}
+
+#tab-batch .empty-cell {
+    color: rgba(255,255,255,0.25);
+}
+
+/* ── 文件上传区 ── */
+#tab-batch .upload-zone {
+    margin-bottom: 14px;
+    border: 1.5px dashed rgba(255,138,0,0.25);
+    border-radius: 14px;
+    background: rgba(255,138,0,0.04);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+#tab-batch .upload-zone:hover {
+    border-color: #FF6B00;
+    background: rgba(255,107,0,0.06);
+}
+
+#tab-batch .upload-zone.drag {
+    border-color: #FF6B00;
+    background: rgba(255,107,0,0.12);
+    transform: scale(1.01);
+}
+
+#tab-batch .upload-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 22px 18px;
+    color: #FF6B00;
+}
+
+#tab-batch .upload-text {
+    font-size: 13.5px;
+    font-weight: 500;
+}
+
+#tab-batch .upload-text .up-link {
+    color: #FF6B00;
+    text-decoration: underline;
+}
+
+#tab-batch .upload-sub {
+    font-size: 11.5px;
+    opacity: 0.6;
+}
+
+#tab-batch .upload-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    color: #93C5FD;
+    font-size: 13px;
+}
+
+#tab-batch .upload-meta .up-file {
+    font-weight: 600;
+    color: #fff;
+}
+
+#tab-batch .upload-meta .up-count {
+    opacity: 0.75;
+    font-size: 12px;
+}
+
+#tab-batch .upload-meta .up-clear {
+    margin-left: auto;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.18);
+    color: var(--text-primary, #fff);
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#tab-batch .upload-meta .up-clear:hover {
+    background: rgba(255,255,255,0.08);
+}
+/* ── Light theme 覆盖：修正批量 tab 在浅色模式下的可读性 ── */
+[data-theme="light"] #tab-batch .batch-hero .hero-title { color: var(--text-primary); }
+[data-theme="light"] #tab-batch .batch-hero .hero-subtitle { color: var(--text-secondary); opacity: 1; }
+
+[data-theme="light"] #tab-batch .nav-link { color: var(--text-secondary); }
+[data-theme="light"] #tab-batch .nav-link:hover { color: var(--text-primary); background: rgba(0,0,0,0.05); }
+
+[data-theme="light"] #tab-batch .song-input {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-color: var(--glass-border);
+}
+[data-theme="light"] #tab-batch .song-input::placeholder { color: var(--text-tertiary); }
+
+[data-theme="light"] #tab-batch .link-btn { color: #FF8A00; }
+[data-theme="light"] #tab-batch .link-btn:hover { background: rgba(255,138,0,0.1); }
+
+[data-theme="light"] #tab-batch .input-hint { color: var(--text-secondary); opacity: 1; }
+[data-theme="light"] #tab-batch .input-hint code { background: rgba(0,0,0,0.06); color: #FF8A00; }
+
+[data-theme="light"] #tab-batch .parse-info { color: var(--text-secondary); opacity: 1; }
+[data-theme="light"] #tab-batch .concurrency-label { color: var(--text-secondary); opacity: 1; }
+[data-theme="light"] #tab-batch .mini-select {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-color: var(--glass-border);
+}
+
+[data-theme="light"] #tab-batch .progress-bar { background: rgba(0,0,0,0.08); }
+[data-theme="light"] #tab-batch .progress-text { color: var(--text-secondary); opacity: 1; }
+
+[data-theme="light"] #tab-batch .result-title { color: var(--text-primary); }
+[data-theme="light"] #tab-batch .download-btn {
+    color: #FF8A00;
+    border-color: rgba(255,138,0,0.35);
+    background: rgba(255,138,0,0.08);
+}
+[data-theme="light"] #tab-batch .download-btn:hover { color: #fff; }
+
+[data-theme="light"] #tab-batch .table-scroll { border-color: var(--glass-border); }
+[data-theme="light"] #tab-batch .results-table { background: var(--bg-elevated); }
+[data-theme="light"] #tab-batch .results-table th,
+[data-theme="light"] #tab-batch .results-table td {
+    border-color: var(--glass-border);
+    color: var(--text-primary);
+}
+[data-theme="light"] #tab-batch .results-table th { background: rgba(0,0,0,0.04); }
+[data-theme="light"] #tab-batch .results-table .col-song {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    box-shadow: 2px 0 6px rgba(0,0,0,0.04);
+}
+[data-theme="light"] #tab-batch .results-table tbody tr:hover td { background: rgba(255,138,0,0.06); }
+[data-theme="light"] #tab-batch .results-table tbody tr:hover .col-song { background: rgba(255,138,0,0.08); }
+
+[data-theme="light"] #tab-batch .tag-exact { color: #059669; }
+[data-theme="light"] #tab-batch .tag-other { color: #b45309; }
+[data-theme="light"] #tab-batch .tag-none { color: var(--text-tertiary); }
+[data-theme="light"] #tab-batch .empty-cell { color: var(--text-tertiary); }
+[data-theme="light"] #tab-batch .result-note { color: var(--text-secondary); opacity: 1; }
+
+[data-theme="light"] #tab-batch .upload-zone {
+    background: rgba(255,138,0,0.03);
+    border-color: rgba(255,138,0,0.2);
+}
+[data-theme="light"] #tab-batch .upload-zone.drag { background: rgba(255,107,0,0.08); }
+[data-theme="light"] #tab-batch .upload-inner { color: #FF6B00; }
+[data-theme="light"] #tab-batch .upload-text .up-link { color: #FF6B00; }
+[data-theme="light"] #tab-batch .upload-sub { color: var(--text-secondary); opacity: 1; }
+[data-theme="light"] #tab-batch .upload-meta { color: #FF8A00; }
+[data-theme="light"] #tab-batch .upload-meta .up-file { color: var(--text-primary); }
+[data-theme="light"] #tab-batch .upload-meta .up-count { color: var(--text-secondary); opacity: 1; }
+[data-theme="light"] #tab-batch .upload-meta .up-clear {
+    color: var(--text-primary);
+    border-color: var(--glass-border);
+}
+[data-theme="light"] #tab-batch .upload-meta .up-clear:hover { background: rgba(0,0,0,0.05); }

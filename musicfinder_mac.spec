@@ -1,0 +1,85 @@
+# -*- mode: python ; coding: utf-8 -*-
+# MusicFinder Mac 打包配置（产出 MusicFinder.app）
+# 用法: python -m PyInstaller musicfinder_mac.spec --noconfirm
+import os
+
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC)) if 'SPEC' in globals() else os.path.dirname(os.path.abspath(__file__))
+APP_DIR = SPEC_DIR
+
+block_cipher = None
+
+a = Analysis(
+    [os.path.join(APP_DIR, 'app.py')],
+    pathex=[APP_DIR],
+    binaries=[],
+    datas=[
+        (os.path.join(APP_DIR, 'templates'), 'templates'),
+        (os.path.join(APP_DIR, 'static'), 'static'),
+        (os.path.join(APP_DIR, 'evidence'), 'evidence'),
+        (os.path.join(APP_DIR, 'monitor'), 'monitor'),
+        # 单文件的目标写 '.'（bundle 根目录）。若写成同名字符串，PyInstaller 会
+        # 当成目录名，产出 port.txt/port.txt 这种嵌套，运行时 open() 直接 IsADirectoryError。
+        (os.path.join(APP_DIR, '使用说明.md'), '.'),
+        (os.path.join(APP_DIR, 'port.txt'), '.'),
+    ],
+    hiddenimports=[
+        'flask', 'jinja2', 'markupsafe', 'werkzeug', 'itsdangerous',
+        'click', 'openpyxl', 'et_xmlfile',
+        'requests', 'urllib3', 'certifi', 'charset_normalizer',
+        'pypinyin',
+        # 加密模块（app.py 在函数内懒加载：from Crypto.Cipher import AES），
+        # PyInstaller 静态分析抓不到，必须显式声明，否则打包运行后 ModuleNotFoundError
+        'Crypto', 'Crypto.Cipher', 'Crypto.Util.Padding',
+        # app.py 顶层 import config（云端配置兜底），PyInstaller 静态分析可能漏收，显式声明
+        'config',
+        # 音乐证据监测台（版权取证）后端包：模块级 import 在 try/except 内，
+        # PyInstaller 静态分析可能漏收，这里显式声明保证打进包
+        'evidence', 'evidence.db', 'evidence.importer', 'evidence.detect',
+        'evidence.classify', 'evidence.engine', 'evidence.routes',
+        'evidence.platforms', 'evidence.platforms.netease',
+        'evidence.platforms.qishui', 'evidence.platforms.douyin',
+        # 平台监控模块（反山寨/歌手监控）后端包，同样显式声明
+        'monitor', 'monitor.db', 'monitor.importer', 'monitor.matcher',
+        'monitor.normalize', 'monitor.routes',
+        'sqlite3',
+    ],
+    # Playwright 为可选增强（登录/酷我词曲/汽水搜索），运行时 try/except 兜底；
+    # 打包环境不收集浏览器二进制，故整体排除，避免体积膨胀与无用依赖
+    excludes=['playwright', 'playwright.sync_api', 'playwright._impl'],
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    exclude_binaries=True,
+    name='MusicFinder',
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    name='MusicFinder',
+)
+
+app = BUNDLE(
+    coll,
+    name='MusicFinder.app',
+    icon=None,
+    info_plist={
+        'NSHighResolutionCapable': True,
+        'LSBackgroundOnly': True,  # 后台运行（纯本地 server），双击只唤起浏览器
+        'CFBundleName': 'MusicFinder',
+        'CFBundleDisplayName': 'MusicFinder',
+        'CFBundleIdentifier': 'com.musicfinder.app',
+        'CFBundleVersion': '4.28.0',
+        'CFBundleShortVersionString': '4.28.0',
+        'CFBundleDocumentTypes': [],
+    },
+)

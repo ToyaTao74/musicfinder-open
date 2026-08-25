@@ -1,0 +1,108 @@
+{# 证据监测页签（include 进 index.html） #}
+<section class="tab-content" id="tab-evidence">
+  <header class="ev-header">
+    <div>
+      <p class="ev-overline">侵权取证</p>
+      <h1 class="ev-title">音乐证据监测</h1>
+    </div>
+    <div class="ev-actions">
+      <button class="button secondary" id="evExport" type="button">导出证据</button>
+      <button class="button secondary" id="evRefresh" type="button">刷新</button>
+    </div>
+  </header>
+
+  {# 状态横幅：明确告知「还差什么才能跑出有意义的盗版判决」 #}
+  <div class="ev-banner" id="evBanner" hidden></div>
+
+  <div class="ev-stat-grid" id="evStats"></div>
+
+  <div class="ev-grid">
+    {# 左：曲库导入 + 新建监测 #}
+    <div class="ev-col">
+      <div class="ev-card">
+        <h2 class="ev-h2">① 授权曲库</h2>
+        <p class="ev-hint">导入你要保护的歌单 Excel（歌曲ID/歌名/艺人/专辑/版本/版权公司/词曲作者）。</p>
+        <input type="file" id="evCatalogFile" accept=".xlsx,.xlsm,.xls,.csv" hidden>
+        <button class="button secondary" id="evCatalogPick" type="button">选择 Excel</button>
+        <span id="evCatalogMsg" class="ev-msg"></span>
+      </div>
+
+      <div class="ev-card">
+        <h2 class="ev-h2">② 新建监测</h2>
+        <label class="ev-label">歌名<input id="evSong" required placeholder="例如：你丢下了我爱上了谁"></label>
+        <label class="ev-label">歌手<input id="evArtist" placeholder="例如：蒋蕙林"></label>
+        <label class="ev-label">版本<input id="evVersion" placeholder="选填，例如：粤语版"></label>
+        <fieldset class="ev-fieldset">
+          <legend>平台</legend>
+          <label class="ev-check"><input type="checkbox" name="evPlatform" value="netease" checked><span>网易云</span></label>
+          <label class="ev-check"><input type="checkbox" name="evPlatform" value="qishui" checked><span>汽水音乐</span></label>
+          <label class="ev-check"><input type="checkbox" name="evPlatform" value="douyin" checked><span>抖音</span></label>
+        </fieldset>
+        <label class="ev-label">抖音发现数<input id="evDouyinTarget" type="number" min="50" max="500" step="10" value="300"></label>
+        <button class="button primary" id="evStart" type="button">开始监测</button>
+        <p id="evStartMsg" class="ev-msg"></p>
+      </div>
+    </div>
+
+    {# 右：任务 + 结果 #}
+    <div class="ev-col ev-col-wide">
+      <div class="ev-card">
+        <div class="ev-card-bar">
+          <h2 class="ev-h2">③ 任务与结果</h2>
+          <select id="evTaskSelect" aria-label="选择任务"></select>
+        </div>
+        <div id="evTaskStatus" class="ev-task-status"></div>
+
+        <div class="ev-filters">
+          <select id="evPlatformFilter"><option value="all">全部平台</option><option value="netease">网易云</option><option value="qishui">汽水</option><option value="douyin">抖音</option></select>
+          <select id="evThresholdFilter"><option value="all">全部阈值</option><option value="qualified">已达阈值</option><option value="unqualified">未达阈值</option></select>
+          <select id="evPiracyFilter"><option value="all">全部盗版</option><option value="是">盗版</option><option value="否">授权版</option><option value="待复核">待复核</option></select>
+          <select id="evReviewFilter"><option value="all">全部审核</option><option value="待复核">待复核</option><option value="已确认">已确认</option><option value="已忽略">已忽略</option></select>
+          <button class="button secondary" id="evBatchConfirm" disabled>确认所选</button>
+          <button class="button secondary" id="evBatchIgnore" disabled>忽略所选</button>
+        </div>
+
+        <div class="ev-table-wrap">
+          <table class="ev-table">
+            <thead><tr>
+              <th><input type="checkbox" id="evSelectAll"></th>
+              <th>歌曲 / 详情</th><th>平台</th><th>链接</th>
+              <th>互动</th><th>命中依据</th><th>盗版</th><th>审核</th>
+            </tr></thead>
+            <tbody id="evRows"></tbody>
+          </table>
+          <p id="evEmpty" class="ev-empty" hidden>当前范围没有监测结果</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# 抖音扫码登录弹窗 #}
+  <div class="ev-modal" id="evDouyinModal" hidden role="dialog" aria-labelledby="evDouyinTitle">
+    <div class="ev-modal-card">
+      <div class="ev-modal-head">
+        <h3 id="evDouyinTitle">📱 抖音扫码登录</h3>
+        <button class="ev-modal-x" id="evDouyinClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="ev-modal-body">
+        <p class="ev-modal-intro">抖音必须真人扫码登录一次，登录态会保存到本机，以后自动复用。</p>
+        <p class="ev-modal-note" id="evDouyinNote">正在检查依赖…</p>
+        <ol class="ev-modal-steps">
+          <li>复制下方命令，<b>打开「终端」(Terminal.app)</b> 粘贴回车</li>
+          <li>会在你电脑屏幕上弹出 Chrome 浏览器，显示抖音登录二维码</li>
+          <li>打开手机<b>抖音 APP</b>，扫一扫扫这个二维码</li>
+          <li>手机点「确认登录」后，<b>回到终端窗口按回车</b>，登录态就保存好了</li>
+          <li>回这里点「✅ 我已扫码，刷新状态」</li>
+        </ol>
+        <div class="ev-modal-cmd">
+          <textarea id="evDouyinCmd" readonly rows="3"></textarea>
+          <button class="button primary" id="evDouyinCopy" type="button">一键复制</button>
+        </div>
+        <div class="ev-modal-foot">
+          <span id="evDouyinStatus" class="ev-modal-status"></span>
+          <button class="button secondary" id="evDouyinRefresh" type="button">✅ 我已扫码，刷新状态</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

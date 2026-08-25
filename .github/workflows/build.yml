@@ -1,0 +1,94 @@
+# -*- mode: yaml ; coding: utf-8 -*-
+# MusicFinder 跨平台打包 CI
+# 作用：推送代码到 GitHub 后，自动在云端 Windows / macOS runner 上
+#       分别产出 MusicFinder.exe 与 MusicFinder-mac.zip，无需本机有对应系统。
+#
+# 用法：
+#   1. 把整个项目（app.py / templates / static / musicfinder_*.spec / 本文件）
+#      推送到 GitHub 仓库。
+#   2. 在仓库页面 Actions → "Build MusicFinder" → Run workflow（或任意 push 自动触发）。
+#   3. 运行结束后，到 Artifacts 下载 MusicFinder-windows / MusicFinder-macos。
+#
+# 说明：
+#   - Windows runner 默认 x64，产出的 .exe 是标准 x64 版，分发给所有 Windows 用户可用。
+#   - macOS 步骤复刻了本地 build_mac.sh 的「清理缓存 + 覆盖最新前端 + 校验」逻辑，
+#     避免 PyInstaller 把陈旧 templates 打进 bundle（此前踩过的坑）。
+
+name: Build MusicFinder
+
+on:
+  push:
+    branches: [main, master, publish]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller flask openpyxl requests pypinyin pycryptodome
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller musicfinder_win.spec --noconfirm
+
+      - name: Read APP_VERSION from app.py
+        id: v
+        shell: bash
+        run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MF-${{ steps.v.outputs.v }}-Windows
+          path: dist/MusicFinder.exe
+          # 公开仓库 Actions 存储无配额限制，保留 90 天给用户充足下载窗口
+          retention-days: 90
+
+  macos:
+    name: macOS (.app / .zip)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller flask openpyxl requests pypinyin pycryptodome
+
+      - name: Build with PyInstaller (fresh, avoid stale bundle)
+        run: |
+          rm -rf dist build
+          python -m PyInstaller musicfinder_mac.spec --noconfirm
+          # 双保险：显式覆盖最新前端，避免 PyInstaller 缓存陈旧 templates
+          # （用整目录拷贝，避免漏掉 evidence.html / monitor.html / playlist.html 等新页面）
+          cp -rf templates/. dist/MusicFinder.app/Contents/Resources/templates/
+          cp -rf static/. dist/MusicFinder.app/Contents/Resources/static/
+          cd dist && zip -r -q MusicFinder-mac.zip MusicFinder.app
+
+      - name: Read APP_VERSION from app.py
+        id: v
+        shell: bash
+        run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MF-${{ steps.v.outputs.v }}-Mac
+          path: dist/MusicFinder-mac.zip
+          # 公开仓库 Actions 存储无配额限制，保留 90 天给用户充足下载窗口
+          retention-days: 90

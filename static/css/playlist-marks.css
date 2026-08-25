@@ -1,0 +1,1247 @@
+/* ══════════════════════════════════════════════════════════════
+   v4 新增：全网同步指示 / 标记歌曲页 / 我的歌单页
+   复用主样式变量（--bg-base / --text-primary / --accent 等）
+   v4.2：词曲作者展示 + SSE 边搜边显示 + 5 平台空格子收成胶囊
+   v4.3：输入区排版拉齐主题（玻璃 + 渐变 + 动效）
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 顶栏：全网同步指示 ── */
+.sync-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 10px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    white-space: nowrap;
+}
+.sync-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-tertiary);
+    box-shadow: 0 0 0 0 rgba(22,163,74,0.5);
+}
+.sync-badge.synced { color: #16a34a; border-color: rgba(22,163,74,0.35); }
+.sync-badge.synced .sync-dot {
+    background: #16a34a;
+    animation: syncPulse 2s ease-out infinite;
+}
+@keyframes syncPulse {
+    0% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+    70% { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
+    100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+
+/* ── 标记歌曲页 ── */
+.marks-toolbar {
+    display: flex; align-items: center; gap: 12px;
+    margin: 4px 0 16px;
+    flex-wrap: wrap;
+}
+.marks-count { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
+.search-btn.sm {
+    padding: 7px 16px; font-size: 13px; border-radius: 10px;
+}
+.mark-type-pill {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--glass-border);
+}
+/* v4.13：mark-type-pill 也按 markClass 上色（与搜索页一致） */
+.mark-type-pill.mark-ok        { background: rgba(49,194,124,.16); color: #1f9d57; }
+.mark-type-pill.mark-warn      { background: rgba(255,154,0,.16); color: #c97a00; }
+.mark-type-pill.mark-fav       { background: rgba(45,162,249,.16); color: #1c7fd6; }
+.mark-type-pill.mark-excl      { background: rgba(230,0,38,.14);  color: #c2001f; }
+.mark-type-pill.mark-def       { background: rgba(140,140,160,.16); color: #6b6b80; }
+.mark-type-pill.mark-genuine   { background: rgba(49,194,124,.20); color: #1a8a4f; }
+.mark-type-pill.mark-unprocessed { background: rgba(255,154,0,.18); color: #b86800; }
+.mark-type-pill.mark-suspect   { background: rgba(230,0,38,.16);  color: #c2001f; }
+.mark-type-pill.mark-processed { background: rgba(120,120,140,.20); color: #50506a; }
+
+.mark-type-cell { white-space: nowrap; }
+.mark-type-cell .mark-cell-row { gap: 4px; }
+.mark-note { color: var(--text-secondary); font-size: 13px; max-width: 260px; }
+.mark-time { color: var(--text-tertiary); font-size: 12px; white-space: nowrap; }
+.mark-del {
+    padding: 4px 10px; font-size: 12px; border-radius: 8px; cursor: pointer;
+    background: transparent; color: #ef4444; border: 1px solid rgba(239,68,68,0.35);
+}
+.mark-del:hover { background: rgba(239,68,68,0.12); }
+
+/* 视图切换：我本账号 / 云端全网 */
+.marks-scope-switch {
+    display: inline-flex; align-items: center;
+    background: var(--glass-bg, rgba(255,255,255,0.05));
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.10));
+    border-radius: 12px; padding: 3px; gap: 2px;
+    backdrop-filter: blur(8px);
+}
+.marks-scope-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; font-size: 13px; font-weight: 500;
+    border: 0; border-radius: 9px; cursor: pointer;
+    background: transparent; color: var(--text-secondary);
+    transition: all .2s ease;
+}
+.marks-scope-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+.marks-scope-btn.active {
+    background: var(--accent, #5b6cff);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(91,108,255,0.30);
+}
+.marks-scope-icon { font-size: 14px; line-height: 1; }
+
+/* 状态条：加载中 / 错误 / 自动降级提示 */
+.marks-status {
+    font-size: 13px; line-height: 1.6; margin: -8px 0 12px; padding: 0 2px;
+    min-height: 20px; color: var(--text-tertiary);
+}
+.marks-status[data-kind="loading"] { color: var(--text-tertiary); }
+.marks-status[data-kind="warn"]    { color: #d97706; }
+.marks-status[data-kind="error"]   { color: #dc2626; }
+
+/* 操作人徽标（云端全网视图用） */
+.mark-owner-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    background: rgba(91,108,255,0.10);
+    color: var(--accent, #5b6cff);
+    border: 1px solid rgba(91,108,255,0.20);
+    letter-spacing: 0.2px;
+}
+/* 别人的标 → 锁图标（不可删） */
+.mark-locked {
+    display: inline-block; font-size: 13px; opacity: 0.45; cursor: not-allowed;
+}
+
+/* ────────────────────────────────────────────────────────────
+   我的歌单页
+   ──────────────────────────────────────────────────────────── */
+.playlist-result { margin-top: 22px; }
+.result-head {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.result-title { font-size: 17px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.result-searched { color: var(--text-tertiary); font-size: 12px; }
+
+/* 卡片外壳 —— 略大的呼吸感、圆角、柔和阴影 */
+.pl-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 18px 20px 16px;
+    margin-bottom: 22px;
+    box-shadow: var(--shadow-card);
+}
+/* 新进卡片滑入动效 */
+.pl-card { animation: plFadeIn .35s ease-out; }
+@keyframes plFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.pl-card-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 14px; padding-bottom: 12px;
+    border-bottom: 1px dashed var(--glass-border);
+}
+.pl-song { font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: .2px; }
+.pl-performer { font-size: 14px; color: var(--text-secondary); }
+.pl-versions {
+    margin-left: auto; font-size: 12px; color: var(--text-secondary);
+    background: var(--accent-soft); padding: 4px 12px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.pl-dot-orig, .pl-dot-cover {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+}
+.pl-dot-orig { background: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.18); }
+.pl-dot-cover { background: var(--highlight); }
+.pl-total { color: var(--text-tertiary); margin-left: 4px; font-weight: 500; }
+
+/* ── 版本行：原版 / 翻唱 / 其它 ── */
+.pl-version {
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.02);
+    position: relative;
+}
+.pl-ver--orig {
+    border-color: rgba(22,163,74,0.45);
+    background: linear-gradient(180deg, rgba(22,163,74,0.10) 0%, rgba(22,163,74,0.04) 100%);
+    box-shadow: 0 1px 0 rgba(22,163,74,0.08) inset;
+}
+.pl-ver--cover { border-left: 3px solid var(--highlight); }
+.pl-ver--other { border-left: 3px solid var(--text-tertiary); }
+
+/* ── v4.6 固定监测：版本头操作（📌固定 / ✕删除）+ 整首删除 + 固定态高亮 ── */
+.pl-ver-actions { margin-left: auto; display: flex; gap: 6px; }
+.pl-ver-pin, .pl-ver-del {
+    font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg); color: var(--text-secondary);
+    cursor: pointer; transition: all 0.18s ease; white-space: nowrap;
+    user-select: none;
+}
+.pl-ver-pin:hover { border-color: #f59e0b; color: #d97706; background: rgba(245,158,11,0.12); }
+.pl-ver-pin.is-pinned {
+    border-color: #f59e0b; color: #fff; background: #f59e0b;
+    box-shadow: 0 2px 10px rgba(245,158,11,0.35);
+}
+.pl-ver-del:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.12); }
+/* 固定态：版本块加金色左边框 + 轻微光晕（与原版绿、翻唱蓝区分） */
+.pl-version.is-pinned {
+    border-color: rgba(245,158,11,0.55) !important;
+    box-shadow: 0 0 0 1px rgba(245,158,11,0.25), 0 2px 14px rgba(245,158,11,0.10) inset;
+}
+.pl-version.refreshed-missing {
+    opacity: 0.55; border-style: dashed !important;
+}
+/* 整首删除按钮（卡片头右侧） */
+.pl-song-del {
+    margin-left: auto; font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 8px;
+    border: 1px solid var(--glass-border); background: var(--glass-bg);
+    color: var(--text-tertiary); cursor: pointer; transition: all 0.18s ease;
+}
+.pl-song-del:hover { border-color: #ef4444; color: #ef4444; background: rgba(239,68,68,0.12); }
+
+/* ── 固定监测操作条 ── */
+.pl-pin-row {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin: 10px 0 14px; padding: 12px 16px;
+    border-radius: 14px; border: 1px solid var(--glass-border);
+    background: var(--glass-bg); backdrop-filter: blur(14px);
+}
+.pl-pin-row[hidden] { display: none; }
+.pl-pin-count { font-size: 14px; font-weight: 700; color: #f59e0b; }
+.pl-pin-tip { font-size: 12px; color: var(--text-tertiary); line-height: 1.4; }
+.mark-io-btn.primary {
+    color: #fff; border-color: var(--accent);
+    background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 80%, #000 20%));
+}
+.mark-io-btn.primary:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.mark-io-btn.primary:disabled { opacity: 0.7; cursor: progress; }
+/* 「仅看固定」激活态 */
+#plOnlyPinnedBtn.active {
+    color: #fff; background: #f59e0b; border-color: #f59e0b;
+}
+
+/* 「仅看固定」过滤：只显示固定版本 + 含固定版本的整首 */
+.only-pinned .pl-version:not(.is-pinned) { display: none; }
+.only-pinned .pl-card.hidden-no-pin { display: none; }
+
+.pl-ver-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.pl-version-tag {
+    display: inline-block; font-size: 12px; font-weight: 600;
+    padding: 3px 12px; border-radius: 999px;
+    color: var(--text-secondary); background: var(--glass-hover);
+    border: 1px solid var(--glass-border);
+}
+.pl-version-tag.orig {
+    color: #fff; background: #16a34a; border-color: #16a34a;
+    box-shadow: 0 2px 10px rgba(22,163,74,0.3);
+}
+.pl-version-tag.cover {
+    color: #fff; background: var(--highlight); border-color: var(--highlight);
+}
+.pl-ver-note {
+    font-size: 11px; color: var(--text-tertiary); font-weight: 500;
+}
+
+/* ── 5 平台网格 ── */
+.pl-plats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+}
+.pl-plat {
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    min-height: 96px;
+    padding: 10px 11px;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.pl-plat--has { padding: 10px 11px; }
+.pl-plat--empty {
+    opacity: .55;
+    align-items: center; justify-content: center;
+    background: transparent;
+    border-style: dashed;
+}
+.pl-plat-none {
+    font-size: 11px; color: var(--text-tertiary);
+    margin-top: 4px;
+}
+.pl-plat-head {
+    display: flex; align-items: center; gap: 6px;
+}
+.pl-plat-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.pl-plat-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.pl-link {
+    margin-left: auto; font-size: 11px; color: var(--accent);
+    text-decoration: none;
+}
+.pl-link:hover { text-decoration: underline; }
+.pl-plat-artist {
+    font-size: 12px; color: var(--text-secondary);
+    line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.pl-plat-counts {
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.pl-plat-brand {
+    font-size: 11px; color: var(--text-tertiary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pl-plat-avail {
+    display: inline-block; margin-top: auto; font-size: 10px;
+    padding: 1px 7px; border-radius: 6px; align-self: flex-start;
+}
+.pl-plat-avail.ok { color: #16a34a; background: rgba(22,163,74,0.12); }
+.pl-plat-avail.warn { color: #d97706; background: rgba(217,119,6,0.12); }
+.pl-plat-avail.none { color: var(--text-tertiary); background: var(--glass-hover); }
+.pl-plat-avail.down { color: #ef4444; background: rgba(239,68,68,0.12); }
+/* v4.26.4：付费/会员专属 — 比 ok 更显眼，金色 + 加粗 + 边光，付费感重 */
+.pl-plat-avail.vip {
+    color: #b45309;
+    background: linear-gradient(135deg, rgba(254,243,199,.95) 0%, rgba(253,224,71,.55) 100%);
+    border: 1px solid rgba(217,119,6,.45);
+    font-weight: 700;
+    padding: 1px 8px;
+    box-shadow: 0 1px 2px rgba(217,119,6,.18), inset 0 1px 0 rgba(255,255,255,.5);
+    text-shadow: 0 1px 0 rgba(255,251,235,.55);
+}
+[data-theme="dark"] .pl-plat-avail.vip {
+    color: #fde68a;
+    background: linear-gradient(135deg, rgba(217,119,6,.30) 0%, rgba(180,83,9,.30) 100%);
+    border-color: rgba(253,224,71,.55);
+    text-shadow: none;
+}
+
+/* v4.26.4：数字按量级分级（仅在 metric 行内生效） */
+/* 收藏：平台品牌色，按量级加深 */
+.platform-cell-row.metric .count-value { font-variant-numeric: tabular-nums; }
+.platform-cell-row.metric[data-kind="collection"] .count-value { font-weight: 600; }
+/* 量级 >= 100k：品牌色 + 加粗 + 微微发光（premium premium） */
+.platform-cell-row.metric .count-huge {
+    font-weight: 800;
+    background: linear-gradient(135deg, #ff8a00, #ff5e3a);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    font-size: 1.15em;
+    letter-spacing: -0.01em;
+}
+/* 10k - 100k：品牌色 */
+.platform-cell-row.metric .count-large { color: var(--plat-accent, var(--text-primary)); font-weight: 700; }
+/* 1k - 10k：默认深色加粗 */
+.platform-cell-row.metric .count-mid { color: var(--text-primary); font-weight: 700; }
+/* < 1k：次级色 */
+.platform-cell-row.metric .count-small { color: var(--text-secondary); font-weight: 500; }
+/* 0 / null：弱化 */
+.platform-cell-row.metric .count-empty { color: var(--text-tertiary); opacity: .55; font-weight: 400; }
+/* 在听/评论：次级色，不抢主指标 */
+.platform-cell-row.metric[data-kind="listening"] .count-value,
+.platform-cell-row.metric[data-kind="comment"] .count-value {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+/* ── 词曲作者对比行（v4.3 三栏对比：你输入 / 该版本 / 原版）── */
+/* ── v4.4 状态条：5 个固定 tag ── */
+.pl-status-tag {
+    display: inline-flex; align-items: center;
+    font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 10px;
+    white-space: nowrap;
+    cursor: help; /* 鼠标悬停看 title 描述 */
+    letter-spacing: 0.5px;
+}
+.pl-status-green  { color: #15803d; background: linear-gradient(135deg, rgba(22,163,74,0.15), rgba(22,163,74,0.06)); border: 1px solid rgba(22,163,74,0.35); }
+.pl-status-yellow { color: #b45309; background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.06)); border: 1px solid rgba(245,158,11,0.35); }
+.pl-status-red    { color: #b91c1c; background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.06)); border: 1px solid rgba(239,68,68,0.35); }
+.pl-status-gray   { color: #6b7280; background: linear-gradient(135deg, rgba(107,114,128,0.15), rgba(107,114,128,0.06)); border: 1px solid rgba(107,114,128,0.30); }
+.pl-status-orange { color: #c2410c; background: linear-gradient(135deg, rgba(249,115,22,0.15), rgba(249,115,22,0.06)); border: 1px solid rgba(249,115,22,0.35); }
+
+/* ── v4.5 平台卡业务按钮：两组分明（链接组 主色 ｜ 标记组 语义色）── */
+.pl-plat-actions {
+    margin-top: 8px;
+    display: flex; flex-wrap: wrap;
+    align-items: center; gap: 8px;            /* 两组之间加大间距，视觉分组 */
+}
+.pl-plat-grp {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 2px; border-radius: 8px;
+}
+.pl-plat-grp.pl-grp-link {
+    background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.04));
+    border: 1px solid rgba(99,102,241,0.20);
+}
+.pl-plat-grp.pl-grp-mark {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+}
+.pl-plat-btn {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 8px; border-radius: 5px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    user-select: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 32px;
+}
+.pl-plat-btn:hover { background: var(--glass-hover); }
+/* 链接组（复制/打开）—— 主色蓝紫 */
+.pl-grp-link .pl-plat-btn { color: #4f46e5; }
+.pl-grp-link .pl-plat-btn:hover { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.30); }
+.pl-grp-link .pl-plat-btn.pl-open { color: #4f46e5; }
+/* 标记组（正版/盗版）—— 绿/红语义 */
+.pl-grp-mark .pl-plat-btn.pl-mark-pos { color: #15803d; }
+.pl-grp-mark .pl-plat-btn.pl-mark-pos:hover { background: rgba(22,163,74,0.12); border-color: rgba(22,163,74,0.30); }
+.pl-grp-mark .pl-plat-btn.pl-mark-pir { color: #b91c1c; }
+.pl-grp-mark .pl-plat-btn.pl-mark-pir:hover { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.30); }
+/* 重抓组（↻ 重新抓取）—— 琥珀色，区别于标记/链接 */
+.pl-grp-refetch .pl-plat-btn.pl-refetch { color: #b45309; }
+.pl-grp-refetch .pl-plat-btn.pl-refetch:hover { background: rgba(217,119,6,0.12); border-color: rgba(217,119,6,0.32); }
+.pl-plat-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.pl-plat.is-marked-pos { border-color: rgba(22,163,74,0.45); background: rgba(22,163,74,0.06); }
+.pl-plat.is-marked-pir { border-color: rgba(239,68,68,0.45); background: rgba(239,68,68,0.06); }
+
+/* ── v4.5 词曲作者对比行（平台抓 vs 档案，差异红 ⚠）── */
+.pl-plat-wj {
+    margin-top: 4px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    font-size: 11px; line-height: 1.5;
+    color: var(--text-secondary);
+}
+.pl-wj-tag {
+    color: var(--text-tertiary);
+    font-weight: 600;
+    font-size: 10px;
+    padding: 0 4px;
+    border: 1px solid var(--glass-border);
+    border-radius: 3px;
+    background: var(--glass-bg);
+}
+.pl-wj-val {
+    color: #e07a00;        /* 平台抓到的：蓝（信息色） */
+    font-weight: 500;
+}
+.pl-wj-val.ok  { color: #15803d; }            /* 一致：绿（安心） */
+.pl-wj-val.diff { color: #b91c1c; font-weight: 600; }   /* 差异：红 ⚠ */
+.pl-wj-empty { color: var(--text-tertiary); opacity: 0.5; }
+.pl-wj-arch {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    margin-left: 2px;
+    padding-left: 4px;
+    border-left: 1px solid var(--glass-border);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   v4.16+ 搜索页卡片模式：紧凑网格布局，一行多张
+   v4.25.21 历史曾 single column 占满 1280像素 → 现改为 grid 自适应
+   视口 ≥ 1280: 3 列；1024~1280: 2 列；< 1024: 1 列
+   ══════════════════════════════════════════════════════════════ */
+.search-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+    gap: 14px;
+    padding: 2px;
+}
+/* 搜索卡片去掉歌单页的 margin-bottom（改用 flex gap 控制间距） */
+.search-card.pl-card { margin-bottom: 0; }
+
+/* 卡片头：平台覆盖数小胶囊 */
+.pl-cover-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--glass-hover);
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+/* 卡片底部状态汇总条（✅ 全部正版 / ❌ 有盗版 / ⚠ 未打盗版） */
+.pl-card-foot {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pl-card-foot.good {
+    color: #15803d;
+    background: rgba(22,163,74,0.10);
+    border: 1px solid rgba(22,163,74,0.25);
+}
+.pl-card-foot.bad {
+    color: #b91c1c;
+    background: rgba(239,68,68,0.10);
+    border: 1px solid rgba(239,68,68,0.25);
+}
+.pl-card-foot.pending {
+    color: #b45309;
+    background: rgba(217,119,6,0.10);
+    border: 1px solid rgba(217,119,6,0.22);
+}
+
+/* 词曲作者行（搜索卡片简化版） */
+.pl-wj-row {
+    color: #e07a00;
+    font-weight: 500;
+}
+.pl-wj-arch.diff { color: #b91c1c; border-left-color: rgba(239,68,68,0.4); }
+.pl-wj-sep {
+    color: var(--text-tertiary);
+    opacity: 0.4;
+    margin: 0 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   v4.17 搜索页：每平台打标 + 自定义备注可见 + 卡片紧凑化
+   ══════════════════════════════════════════════════════════════ */
+
+/* v4.17：「无关歌曲」主标签配色（中性灰，与「已排除」红区分） */
+.mark-type-pill.mark-unrelated,
+.mark-type-chip.mark-unrelated,
+.mark-type-select.mark-unrelated,
+.mark-tag-pill.mark-unrelated {
+    background: rgba(120,120,140,.16);
+    color: #50506a;
+}
+/* 主标签 chip 选中态：明显加深背景，区别于默认 */
+.mark-type-chip.mark-unrelated.active {
+    background: rgba(120,120,140,.30);
+    color: #2f2f44;
+    border-color: rgba(120,120,140,.45);
+}
+
+/* v4.17：平台卡"已标"高亮（3 种新状态，与原 is-marked-pos/pir 同框线样式） */
+.pl-plat.is-marked-unrelated {
+    border-color: rgba(120,120,140,.55);
+    background: repeating-linear-gradient(
+        135deg,
+        rgba(120,120,140,.04) 0 6px,
+        rgba(120,120,140,.10) 6px 12px
+    );
+    opacity: .82;
+}
+.pl-plat.is-marked-bad {
+    border-color: rgba(239,68,68,.45);
+    background: rgba(239,68,68,.04);
+    opacity: .85;
+}
+
+/* v4.17：「无关」按钮色（中性灰，区别于正版绿/盗版红） */
+.pl-grp-mark .pl-plat-btn.pl-unrelated {
+    color: #50506a;
+}
+.pl-grp-mark .pl-plat-btn.pl-unrelated:hover {
+    background: rgba(120,120,140,.12);
+    border-color: rgba(120,120,140,.30);
+}
+
+/* v4.17：自定义备注在搜索页一级卡片可见（不再藏 tooltip） */
+.pl-card-note {
+    margin-top: 10px;
+    padding: 7px 12px;
+    background: linear-gradient(135deg, rgba(99,102,241,.08), rgba(99,102,241,.03));
+    border: 1px solid rgba(99,102,241,.22);
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #1f2937;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.pl-card-note-icon {
+    flex: none;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.pl-card-note-text {
+    flex: 1;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+[data-theme="dark"] .pl-card-note { color: #e5e7eb; }
+
+/* v4.17：搜索卡片上下紧凑化（保持歌单页呼吸感，仅收搜索页） */
+.search-card.pl-card {
+    padding: 12px 16px 12px;
+}
+.search-card .pl-card-head {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+}
+.search-card .pl-version {
+    padding: 8px 10px;
+    margin-bottom: 6px;
+}
+.search-card .pl-ver-head {
+    margin-bottom: 6px;
+}
+.search-card .pl-card-foot {
+    margin-top: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+.search-cards {
+    gap: 10px;
+}
+.search-card .pl-plat {
+    padding: 7px 8px;
+    min-height: 78px;
+    gap: 3px;
+}
+.search-card .pl-plat-actions {
+    margin-top: 4px;
+    gap: 4px;
+}
+.search-card .pl-plat-artist {
+    font-size: 11.5px;
+    line-height: 1.35;
+    -webkit-line-clamp: 1;
+}
+.search-card .pl-plat-counts { font-size: 12px; }
+
+/* ── v4.17.3：每平台数据三个标签：收藏/在听/评论 ── */
+.pl-plat-counts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.pl-c-cell { display: inline-flex; align-items: baseline; gap: 3px; }
+.pl-c-lbl { font-size: 10px; color: var(--text-tertiary); font-weight: 500; letter-spacing: 0.2px; }
+.pl-c-num { font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.pl-c-sep { color: var(--text-tertiary); opacity: 0.55; font-weight: 400; }
+.pl-plat-counts .cell-error, .pl-plat-counts .cell-nodata { font-size: 11px; color: var(--text-tertiary); }
+.search-card .pl-plat-counts { font-size: 12px; line-height: 1.4; }
+
+/* ── v4.4 旧词曲对比行样式已删（用户反馈诊断信息不暴露到卡片）── */
+
+/* ── v4.4 批量操作行 + 卡片勾选 ── */
+.pl-batch-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 10px 0 14px;
+    padding: 8px 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    font-size: 12px;
+}
+.pl-batch-tip { color: var(--text-tertiary); font-size: 12px; font-weight: 500; }
+.pl-batch-sep { color: var(--text-tertiary); opacity: 0.5; margin: 0 2px; }
+.mark-io-btn.pl-batch-pos:not(:disabled) { color: #15803d; border-color: rgba(22,163,74,0.30); }
+.mark-io-btn.pl-batch-pos:not(:disabled):hover { background: rgba(22,163,74,0.10); border-color: #16a34a; }
+.mark-io-btn.pl-batch-pir:not(:disabled) { color: #b91c1c; border-color: rgba(239,68,68,0.30); }
+.mark-io-btn.pl-batch-pir:not(:disabled):hover { background: rgba(239,68,68,0.10); border-color: #ef4444; }
+.mark-io-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pl-card-check {
+    display: inline-flex; align-items: center;
+    cursor: pointer; margin-right: 8px;
+    user-select: none;
+}
+.pl-card-checkbox { position: absolute; opacity: 0; pointer-events: none; }
+.pl-card-checkmark {
+    display: inline-block; width: 16px; height: 16px;
+    border: 1.5px solid var(--glass-border);
+    border-radius: 4px;
+    background: var(--glass-bg);
+    position: relative;
+    transition: all 0.15s ease;
+}
+.pl-card-checkmark::after {
+    content: ''; position: absolute;
+    left: 4px; top: 1px; width: 5px; height: 9px;
+    border-right: 2px solid white; border-bottom: 2px solid white;
+    transform: rotate(45deg) scale(0);
+    transition: transform 0.15s ease;
+}
+.pl-card-checkbox:checked + .pl-card-checkmark {
+    background: var(--accent); border-color: var(--accent);
+}
+.pl-card-checkbox:checked + .pl-card-checkmark::after { transform: rotate(45deg) scale(1); }
+.pl-card.is-checked { background: rgba(var(--accent-rgb, 99,102,241), 0.04); }
+
+
+.pl-no-result {
+    color: var(--text-tertiary); font-size: 13px; padding: 10px 4px;
+    text-align: center;
+}
+
+@media (max-width: 760px) {
+    .pl-plats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 460px) {
+    .pl-plats { grid-template-columns: 1fr; }
+}
+
+/* ────────────────────────────────────────────────────────────
+   v4.3 歌单页输入区 —— 拉齐主题（玻璃 + 渐变 + 动效）
+   之前依赖 batch.css，但 batch.css 没在 index.html 加载，
+   导致 textarea / upload-zone / count-badge 等全无样式。
+   这里把需要的样式自包含进来，全部用主题变量。
+   ──────────────────────────────────────────────────────────── */
+
+/* 歌单输入区头部：标签 + 填入示例链接 */
+.input-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+.link-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent; border: 1px solid var(--glass-border);
+    color: var(--accent);
+    font-size: 12px; font-weight: 600;
+    padding: 5px 12px; border-radius: 999px;
+    cursor: pointer; font-family: inherit;
+    transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+}
+.link-btn:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+/* 提示语行：说明输入格式 */
+.input-hint {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0 0 14px;
+}
+.input-hint code {
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    padding: 1px 7px;
+    border-radius: 5px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+.input-hint b { color: var(--text-primary); font-weight: 600; }
+
+/* 拖拽上传区 —— 玻璃感虚线方块 */
+.upload-zone {
+    margin-bottom: 14px;
+    border: 1.5px dashed var(--glass-border);
+    border-radius: 14px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+.upload-zone::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent 0%, var(--accent-soft) 50%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+.upload-zone:hover {
+    border-color: var(--accent);
+    background: var(--glass-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px var(--accent-soft);
+}
+.upload-zone:hover::before { opacity: 0.4; }
+.upload-zone.drag {
+    border-color: var(--highlight);
+    border-style: solid;
+    background: var(--highlight-soft);
+    transform: scale(1.005);
+    box-shadow: 0 6px 24px var(--highlight-soft);
+}
+
+.upload-inner {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 22px 18px;
+    color: var(--accent);
+    position: relative;
+}
+.upload-text {
+    font-size: 13.5px; font-weight: 500;
+    color: var(--text-primary);
+}
+.upload-text .up-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-weight: 600;
+}
+.upload-sub {
+    font-size: 11.5px; color: var(--text-tertiary);
+}
+
+/* 大文本框 —— 玻璃感 + 聚焦发光 */
+.song-input {
+    width: 100%; min-height: 200px;
+    resize: vertical;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid var(--glass-border);
+    background: var(--bg-elevated);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.7;
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+    outline: none;
+    transition: all 0.25s ease;
+    box-sizing: border-box;
+}
+.song-input::placeholder { color: var(--text-tertiary); }
+.song-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    background: var(--bg-base);
+}
+
+/* 底部行：已识别 + 按钮组 */
+.input-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.parse-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.count-badge {
+    display: inline-block;
+    min-width: 26px; text-align: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), var(--highlight));
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    margin: 0 2px;
+    box-shadow: 0 2px 8px var(--accent-soft);
+    font-variant-numeric: tabular-nums;
+}
+.batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* 进度条 —— 主题渐变 */
+.progress-wrap {
+    margin: 22px 0 14px;
+    text-align: center;
+}
+.progress-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--highlight) 100%);
+    transition: width 0.5s cubic-bezier(0.16,1,0.3,1);
+    box-shadow: 0 0 12px var(--accent-soft);
+}
+.progress-text {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 歌单页 search-btn —— 蓝→橙渐变（覆写 style.css 默认） */
+.search-card .search-btn {
+    background: linear-gradient(135deg, #FF8A00, var(--highlight));
+    box-shadow: 0 6px 20px rgba(255,138,0,0.35);
+}
+.search-card .search-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(255,107,0,0.45);
+}
+
+/* mark-io-btn 主题化（覆写 style.css 默认，让取消类按钮更协调） */
+.mark-io-btn {
+    padding: 9px 18px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+.mark-io-btn:hover {
+    background: var(--glass-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+.mark-io-btn.danger {
+    color: #ef4444;
+    border-color: rgba(239,68,68,0.30);
+}
+.mark-io-btn.danger:hover {
+    background: rgba(239,68,68,0.10);
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* ── 展开/收起 翻唱版本 按钮 ── */
+.pl-expand-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 14px;
+    padding: 9px 18px; border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-secondary);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+    transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+}
+.pl-expand-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+    background: var(--glass-hover);
+    transform: translateY(-1px);
+}
+.pl-expand-caret {
+    transition: transform 0.3s cubic-bezier(0.16,1,0.3,1);
+}
+.pl-expand-btn[aria-expanded="true"] .pl-expand-caret {
+    transform: rotate(180deg);
+}
+.pl-versions-collapsed {
+    margin-top: 12px;
+    animation: plFadeIn .3s ease-out;
+}
+.pl-versions-collapsed[hidden] { display: none; }
+
+/* ── 歌单数据顶部过滤栏 ── */
+.pl-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0 14px;
+}
+.pl-filter-input-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    background: var(--glass-bg, rgba(255,255,255,0.05));
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+    border-radius: 12px;
+    padding: 6px 10px 6px 32px;
+    transition: border-color .2s, box-shadow .2s;
+}
+.pl-filter-input-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.pl-filter-icon {
+    position: absolute;
+    left: 10px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    pointer-events: none;
+}
+.pl-filter-input-wrap input[type="search"] {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 4px 4px;
+    min-width: 0;
+}
+.pl-filter-input-wrap input[type="search"]::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+.pl-filter-input-wrap input[type="search"]::-webkit-search-cancel-button { display: none; }
+.pl-filter-clear {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 6px;
+    transition: background .15s, color .15s;
+    display: none;
+}
+.pl-filter-clear.visible { display: inline-flex; }
+.pl-filter-clear:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-primary);
+}
+.pl-filter-count {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.pl-card.hidden-by-filter { display: none; }
+.pl-filter-row[hidden] { display: none; }
+@media (max-width: 540px) {
+    .pl-filter-row { flex-wrap: wrap; }
+    .pl-filter-input-wrap { max-width: 100%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  已标记页 · 标签管理（筛选 / 批量 / 汇总）
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* 筛选条 */
+.marks-filter-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+    padding: 12px 14px; margin: 10px 0 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+.marks-filter-label { font-size: 13px; font-weight: 600; color: var(--text-tertiary); margin-right: 4px; }
+.marks-filter-divider {
+    display: inline-block; width: 1px; height: 18px;
+    background: var(--glass-border); margin: 0 6px;
+}
+.marks-filter-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 12px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    cursor: pointer; user-select: none;
+    transition: all 0.18s cubic-bezier(0.16,1,0.3,1);
+    font-family: inherit;
+}
+.marks-filter-chip:hover {
+    background: var(--glass-hover);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+.marks-filter-chip.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(255,107,0,0.30);
+}
+.marks-filter-chip.ghost { background: transparent; border-style: dashed; }
+.marks-filter-chip .chip-count {
+    font-size: 11px; opacity: 0.75; padding: 0 5px;
+    background: rgba(0,0,0,0.10); border-radius: 999px;
+}
+.marks-filter-chip.active .chip-count { background: rgba(255,255,255,0.20); opacity: 1; }
+/* 8 类按色显示（与搜索页 mark-badge 同色） */
+.marks-filter-chip.mark-ok        { color: #1f9d57; border-color: rgba(49,194,124,.40); }
+.marks-filter-chip.mark-ok.active { background: #1f9d57; border-color: #1f9d57; color: #fff; }
+.marks-filter-chip.mark-warn      { color: #c97a00; border-color: rgba(255,154,0,.40); }
+.marks-filter-chip.mark-warn.active { background: #c97a00; border-color: #c97a00; color: #fff; }
+.marks-filter-chip.mark-warn-strong { color: #b91c1c; border-color: rgba(239,68,68,.40); }
+.marks-filter-chip.mark-warn-strong.active { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.marks-filter-chip.mark-excl      { color: #c2001f; border-color: rgba(230,0,38,.40); }
+.marks-filter-chip.mark-excl.active { background: #c2001f; border-color: #c2001f; color: #fff; }
+.marks-filter-chip.mark-fav       { color: #1c7fd6; border-color: rgba(45,162,249,.40); }
+.marks-filter-chip.mark-fav.active { background: #1c7fd6; border-color: #1c7fd6; color: #fff; }
+.marks-filter-chip.mark-def       { color: #6b6b80; border-color: rgba(140,140,160,.40); }
+.marks-filter-chip.mark-def.active { background: #6b6b80; border-color: #6b6b80; color: #fff; }
+
+/* 批量操作条 */
+.marks-batch-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 14px; margin-bottom: 12px;
+    background: linear-gradient(135deg, rgba(255,107,0,0.08), rgba(255,107,0,0.04));
+    border: 1px solid rgba(255,107,0,0.30);
+    border-radius: 12px;
+    position: sticky; top: 6px; z-index: 5;
+    backdrop-filter: blur(8px);
+}
+.marks-batch-all { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: var(--text-secondary); }
+.marks-batch-count {
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    padding: 2px 12px; border-radius: 999px; background: rgba(255,107,0,0.15);
+    margin-right: 6px;
+}
+.search-btn.sm.danger { color: #dc2626; border-color: rgba(239,68,68,.40); }
+.search-btn.sm.danger:hover { background: rgba(239,68,68,.10); border-color: #ef4444; }
+.search-btn.sm.warn { color: #c97a00; border-color: rgba(255,154,0,.40); }
+.search-btn.sm.warn:hover { background: rgba(255,154,0,.10); border-color: #c97a00; }
+.search-btn.sm.ghost { background: transparent; }
+
+/* 列 checkbox */
+.col-check { width: 36px; text-align: center; }
+.marks-row-check { cursor: pointer; transform: scale(1.15); }
+.marks-row-check:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* 点改标签的下拉 */
+.mark-type-select {
+    appearance: none; -webkit-appearance: none;
+    padding: 4px 22px 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'><path d='M0 2l5 6 5-6z' fill='%236b6b80'/></svg>") right 6px center / 8px no-repeat;
+    color: inherit;
+    font-size: 12.5px; font-weight: 500;
+    font-family: inherit;
+    cursor: pointer; max-width: 100%;
+    transition: all 0.15s;
+}
+.mark-type-select:hover { border-color: var(--accent); }
+.mark-type-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mark-type-select.mark-ok        { background-color: rgba(49,194,124,.16); color: #1f9d57; }
+.mark-type-select.mark-warn      { background-color: rgba(255,154,0,.16); color: #c97a00; }
+.mark-type-select.mark-warn-strong { background-color: rgba(239,68,68,.16); color: #b91c1c; }
+.mark-type-select.mark-excl      { background-color: rgba(230,0,38,.16); color: #c2001f; }
+.mark-type-select.mark-fav       { background-color: rgba(45,162,249,.16); color: #1c7fd6; }
+.mark-type-select.mark-def       { background-color: rgba(140,140,160,.16); color: #6b6b80; }
+
+/* 附加标签 + 标签类型单元 */
+.mark-cell-row { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.mark-tag-pill {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 500;
+    background: rgba(140,140,160,.12); color: #6b6b80;
+    border: 1px solid rgba(140,140,160,.30);
+    opacity: 0.85;
+}
+.mark-tag-pill.mark-ok    { background: rgba(49,194,124,.10); color: #1f9d57; border-color: rgba(49,194,124,.30); }
+.mark-tag-pill.mark-warn  { background: rgba(255,154,0,.10); color: #c97a00; border-color: rgba(255,154,0,.30); }
+.mark-tag-pill.mark-fav   { background: rgba(45,162,249,.10); color: #1c7fd6; border-color: rgba(45,162,249,.30); }
+.mark-tag-pill.mark-excl  { background: rgba(230,0,38,.10); color: #c2001f; border-color: rgba(230,0,38,.30); }
+.mark-empty-small { color: var(--text-tertiary); font-size: 12px; }
+.mark-action-row { display: flex; gap: 4px; }
+
+/* 标签汇总卡片 */
+.marks-summary {
+    margin-bottom: 12px;
+    padding: 14px 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+}
+.marks-summary-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px;
+}
+.marks-summary-title { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.marks-summary-meta { font-size: 12px; color: var(--text-tertiary); flex: 1; }
+.marks-summary-grid {
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.marks-summary-card {
+    padding: 10px 12px;
+    background: var(--glass-hover);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+}
+.marks-summary-card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+}
+.marks-summary-count { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.marks-summary-sample {
+    font-size: 12px; line-height: 1.5;
+    color: var(--text-secondary);
+}
+.marks-summary-sample-item { display: inline; }
+.marks-summary-sample-item .muted { color: var(--text-tertiary); }
+
+/* 批量弹窗 */
+.modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(6px);
+    animation: fadeIn 0.18s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.marks-batch-dialog {
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary);
+    border-radius: 16px;
+    padding: 24px 28px;
+    max-width: 480px; width: calc(100vw - 40px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    border: 1px solid var(--glass-border);
+}
+.marks-batch-dialog h3 { margin: 0 0 8px; font-size: 17px; }
+.marks-batch-dialog .muted { font-size: 12.5px; color: var(--text-tertiary); margin: 0 0 16px; line-height: 1.5; }
+.marks-batch-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* 状态条扩展（绿色 ok 状态） */
+.marks-status[data-kind="ok"] { color: #1f9d57; }
+
+/* ── 版本号 footer ── */
+.app-footer {
+    text-align: center;
+    padding: 14px 0 18px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    letter-spacing: 0.3px;
+    opacity: 0.75;
+}
+.app-footer #appVersion {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.08);
+    font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+    transition: opacity 0.3s ease;
+}
+.app-footer #appVersion:hover {
+    opacity: 1;
+}
+

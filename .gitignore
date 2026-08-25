@@ -1,0 +1,39 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 构建产物（PyInstaller 输出，体积大且可重建）
+dist/
+build/
+dist_*/
+build_*/
+dist_old_*/
+build_old_*/
+dist_bad_*/
+build_bad_*/
+dist_t*/
+build_t*/
+work_build/
+
+# 依赖/工具二进制（平台专用，不入库）
+binaries/
+
+# 用户数据 / 数据库 / 日志（含密钥，绝不可入库）
+.musicfinder/
+*.db
+*.sqlite
+*.log
+
+# 凭据文件（登录 cookie / 含密钥的配置，绝不可入库）
+cookies.json
+config.py
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 本地备份 / 临时产物
+*.bak*
+*.xlsx

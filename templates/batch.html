@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MusicFinder — 批量歌单数据导出</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260810a') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/batch.css', v='20260810a') }}">
+</head>
+<body>
+
+<!-- 背景装饰 -->
+<div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+</div>
+
+<!-- 顶部导航 -->
+<header class="topbar">
+    <div class="logo">
+        <div class="logo-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"/>
+                <circle cx="6" cy="18" r="3"/>
+                <circle cx="18" cy="16" r="3"/>
+            </svg>
+        </div>
+        <span class="logo-text">MusicFinder</span>
+        <span class="logo-badge">v3</span>
+    </div>
+    <nav class="nav-links">
+        <a href="/" class="nav-link">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            单首搜索
+        </a>
+        <span class="nav-link active">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            批量歌单
+        </span>
+    </nav>
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+    </button>
+</header>
+
+<!-- 主区域 -->
+<main class="main">
+    <section class="batch-hero">
+        <h1 class="hero-title">批量歌单数据导出</h1>
+        <p class="hero-subtitle">粘贴歌单，一键获取每首歌在 QQ音乐 · 酷狗 · 酷我 · 网易云 · 汽水音乐 的收藏量 / 在听 / 评论 / 发行公司，并导出表格</p>
+    </section>
+
+    <!-- 输入卡片 -->
+    <div class="search-card glass">
+        <div class="input-head">
+            <label class="field-label">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                歌单输入（每行一首）
+            </label>
+            <button class="link-btn" id="loadDemoBtn" type="button">填入示例</button>
+        </div>
+        <p class="input-hint">
+            格式：<code>歌名,表演者,词曲作者</code>（词曲作者可省略；也支持用<code>逗号 / 制表符 / 空格</code>分隔）。例如：<br>
+            <code>因为有你,张蔷</code> &nbsp;·&nbsp; <code>秋天的玫瑰,张蔷, fark</code> &nbsp;·&nbsp; <code>晴天 周杰伦 方文山 周杰伦</code>
+        </p>
+
+        <!-- 文件上传区 -->
+        <div class="upload-zone" id="uploadZone">
+            <input type="file" id="fileInput" accept=".xlsx,.xlsm,.docx,.doc,.xls" hidden>
+            <div class="upload-inner" id="uploadInner">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="upload-text">拖拽 Excel / Word 文件到此处，或 <span class="up-link">点击选择文件</span></div>
+                <div class="upload-sub">支持 .xlsx / .xlsm / .docx · 自动识别「歌名 / 表演者 / 词曲作者」列</div>
+            </div>
+            <div class="upload-meta" id="uploadMeta" hidden>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span class="up-file" id="upFileName"></span>
+                <span class="up-count" id="upCount"></span>
+                <button class="up-clear" id="upClear" type="button">移除</button>
+            </div>
+        </div>
+
+        <textarea id="songInput" class="song-input" placeholder="因为有你,张蔷&#10;秋天的玫瑰,张蔷&#10;空白,张蔷&#10;潇洒地走,张蔷"></textarea>
+
+        <div class="input-foot">
+            <div class="parse-info">
+                已识别 <span id="songCount" class="count-badge">0</span> 首
+            </div>
+            <div class="batch-actions">
+                <label class="v2-toggle-label" id="v2ToggleWrap" title="≥500 首建议开启：上传即返回，关闭浏览器/电脑也不丢，进度可实时查">
+                    <input type="checkbox" id="v2Toggle">
+                    <span>大批量任务模式</span>
+                    <span class="v2-hint">断点续跑 + 实时进度</span>
+                </label>
+                <label class="concurrency-label" id="concurrencyWrap">并发
+                    <select id="concurrency" class="mini-select">
+                        <option value="3">3</option>
+                        <option value="6" selected>6</option>
+                        <option value="10">10</option>
+                    </select>
+                </label>
+                <button class="search-btn" id="runBtn">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 3l14 9-14 9V3z"/>
+                    </svg>
+                    <span>开始查询</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 同步模式进度（小批量用，装饰性质） -->
+    <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-text" id="progressText">查询中…</div>
+    </div>
+
+    <!-- 批量任务 v2 仪表盘 -->
+    <div class="v2-dashboard" id="v2Dashboard" hidden>
+        <div class="v2-head">
+            <div class="v2-title">
+                <span class="v2-badge">v2 批量任务</span>
+                <span id="v2TaskName" class="v2-name">—</span>
+                <span class="v2-id">#<span id="v2TaskId">?</span></span>
+            </div>
+            <div class="v2-actions">
+                <button class="link-btn" id="v2CancelBtn" type="button">取消任务</button>
+            </div>
+        </div>
+        <div class="v2-progress">
+            <div class="v2-bar"><div class="v2-bar-fill" id="v2BarFill"></div></div>
+            <div class="v2-stats">
+                <div class="v2-stat">
+                    <span class="v2-stat-num" id="v2Done">0</span>
+                    <span class="v2-stat-lbl">已完成</span>
+                </div>
+                <div class="v2-stat">
+                    <span class="v2-stat-num" id="v2Failed">0</span>
+                    <span class="v2-stat-lbl">失败</span>
+                </div>
+                <div class="v2-stat">
+                    <span class="v2-stat-num" id="v2Total">0</span>
+                    <span class="v2-stat-lbl">总数</span>
+                </div>
+                <div class="v2-stat">
+                    <span class="v2-stat-num" id="v2Pct">0%</span>
+                    <span class="v2-stat-lbl">进度</span>
+                </div>
+                <div class="v2-stat">
+                    <span class="v2-stat-num" id="v2Speed">—</span>
+                    <span class="v2-stat-lbl">首/分钟</span>
+                </div>
+                <div class="v2-stat">
+                    <span class="v2-stat-num" id="v2Eta">—</span>
+                    <span class="v2-stat-lbl">预计剩余</span>
+                </div>
+            </div>
+        </div>
+        <div class="v2-status-line">
+            <span class="v2-status-dot" id="v2StatusDot"></span>
+            <span id="v2StatusText">等待开始…</span>
+        </div>
+        <div class="v2-errors" id="v2Errors" hidden>
+            <div class="v2-errors-head">最近失败（最多 30 条）</div>
+            <div class="v2-errors-body" id="v2ErrorsBody"></div>
+        </div>
+        <div class="v2-foot">
+            <button class="download-btn" id="v2ExportBtn" disabled>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载 Excel（可中途导出已完成的）
+            </button>
+        </div>
+    </div>
+
+    <!-- 结果 -->
+    <div class="result-section" id="resultSection" hidden>
+        <div class="result-head">
+            <h2 class="result-title">查询结果</h2>
+            <button class="download-btn" id="downloadBtn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                下载 Excel
+            </button>
+        </div>
+        <div class="table-scroll">
+            <table class="results-table" id="resultTable">
+                <thead id="resultHead"></thead>
+                <tbody id="resultBody"></tbody>
+            </table>
+        </div>
+        <p class="result-note">
+            匹配口径：以歌名匹配为核心，表演者命中时优先取该版本（标注「精准匹配(目标艺人)」）；同歌名多版本取收藏量最高。发行公司优先取选中版本厂牌，缺失时回退「目标艺人版本优先」逻辑。
+        </p>
+    </div>
+</main>
+
+<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260814b"></script>
+</body>
+</html>

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>监管后台 · MusicFinder v4.20</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel-2:#1e222e; --border:#2a2f3d;
+    --text:#e7e9ee; --muted:#9aa3b2; --accent:#8b5cf6; --accent-2:#a78bfa;
+    --danger:#ef4444; --danger-2:#f87171; --ok:#22c55e; --warn:#f59e0b;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f5f8; --panel:#ffffff; --panel-2:#f0f1f5; --border:#e2e5ec;
+      --text:#1a1d27; --muted:#6b7280; --accent:#7c3aed; --accent-2:#8b5cf6;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:22px 18px 60px;}
+  .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px;}
+  .title{font-size:21px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .title .dot{width:10px;height:10px;border-radius:50%;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 12px var(--accent);}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 16px;}
+  .spacer{flex:1}
+  .btn{border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:7px 13px;border-radius:9px;font-size:13px;cursor:pointer;transition:.15s;text-decoration:none;}
+  .btn:hover{border-color:var(--accent);color:var(--accent-2);}
+  .btn-back{display:inline-flex;align-items:center;gap:5px;}
+  .who{color:var(--muted);font-size:13px;}
+  .who b{color:var(--accent-2);}
+
+  /* Tab 导航 */
+  .tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid var(--border);}
+  .tab{padding:9px 18px;border:none;background:none;color:var(--muted);font-size:14px;
+    font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.15s;}
+  .tab:hover{color:var(--text);}
+  .tab.active{color:var(--accent-2);border-bottom-color:var(--accent);}
+  .tab .badge{display:inline-block;margin-left:5px;padding:1px 7px;border-radius:10px;
+    background:var(--panel-2);font-size:11px;font-weight:600;}
+  .tab.active .badge{background:rgba(139,92,246,.18);color:var(--accent-2);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  /* 通用 */
+  .notice{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--warn);
+    border-radius:10px;padding:10px 14px;font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6;}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;font-size:13.5px;}
+  th,td{padding:11px 13px;text-align:left;border-bottom:1px solid var(--border);}
+  th{background:var(--panel-2);color:var(--muted);font-weight:600;font-size:12.5px;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--panel-2);}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;}
+  .tag-admin{background:rgba(139,92,246,.16);color:var(--accent-2);border:1px solid rgba(139,92,246,.4);}
+  .tag-user{background:var(--panel-2);color:var(--muted);border:1px solid var(--border);}
+  .tag-on{background:rgba(34,197,94,.14);color:var(--ok);border:1px solid rgba(34,197,94,.35);}
+  .tag-off{background:rgba(239,68,68,.14);color:var(--danger-2);border:1px solid rgba(239,68,68,.35);}
+  .tag-used{background:rgba(154,163,178,.14);color:var(--muted);border:1px solid var(--border);}
+  .tag-fresh{background:rgba(34,197,94,.14);color:var(--ok);border:1px solid rgba(34,197,94,.35);}
+  .stats{display:flex;gap:10px;flex-wrap:wrap;}
+  .stat{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:3px 9px;font-size:12px;color:var(--muted);}
+  .stat b{color:var(--text);font-weight:600;}
+  .actions{display:flex;gap:7px;flex-wrap:wrap;}
+  .act{border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:5px 10px;border-radius:8px;font-size:12.5px;cursor:pointer;transition:.15s;white-space:nowrap;}
+  .act:hover{border-color:var(--accent);color:var(--accent-2);}
+  .act-danger:hover{border-color:var(--danger);color:var(--danger-2);}
+  .act:disabled{opacity:.4;cursor:not-allowed;}
+  .state{padding:40px;text-align:center;color:var(--muted);font-size:14px;}
+  .err{color:var(--danger-2);}
+
+  /* 邀请码区 */
+  .invite-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    padding:18px;margin-bottom:18px;}
+  .invite-row{display:flex;gap:10px;flex-wrap:wrap;align-items:end;}
+  .invite-field{display:flex;flex-direction:column;gap:4px;}
+  .invite-field label{font-size:12px;color:var(--muted);}
+  .invite-field input{background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    padding:8px 12px;border-radius:8px;font-size:14px;width:100%;outline:none;}
+  .invite-field input:focus{border-color:var(--accent);}
+  .code-mono{font-family:'SF Mono','Fira Code',monospace;font-size:15px;font-weight:700;
+    color:var(--accent-2);letter-spacing:1px;}
+
+  /* 审计日志 */
+  .audit-filter{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .audit-filter .act.active{border-color:var(--accent);color:var(--accent-2);background:rgba(139,92,246,.1);}
+  .audit-log{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .audit-entry{display:flex;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;}
+  .audit-entry:last-child{border-bottom:none;}
+  .audit-entry .ts{color:var(--muted);min-width:150px;font-size:12px;}
+  .audit-entry .who2{font-weight:600;min-width:80px;}
+  .audit-entry .act2{color:var(--accent-2);min-width:120px;}
+  .audit-entry .res-ok{color:var(--ok);}
+  .audit-entry .res-denied{color:var(--danger-2);}
+
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--accent);color:var(--text);
+    padding:11px 18px;border-radius:11px;font-size:13.5px;box-shadow:0 8px 30px rgba(0,0,0,.4);
+    opacity:0;pointer-events:none;transition:.25s;z-index:99;}
+  .toast.show{opacity:1;}
+  .toast.err{border-color:var(--danger);}
+  @media (max-width:680px){
+    table{font-size:12.5px;}
+    th,td{padding:8px 9px;}
+    .stats{display:none;}
+    .audit-entry .ts{min-width:100px;}
+  }
+  .perms{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px;width:min(420px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.5);}
+  .modal h3{margin:0 0 6px;font-size:16px;}
+  .modal .muted{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.5;}
+  .perm-row{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid var(--border);}
+  .perm-row input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);}
+  .perm-row .pr-label{font-weight:600;font-size:14px;}
+  .perm-row .pr-desc{color:var(--muted);font-size:12px;margin-top:2px;line-height:1.4;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="title"><span class="dot"></span>监管后台</div>
+    <div class="spacer"></div>
+    <span class="who">管理员：<b id="curAdmin">—</b></span>
+    <a class="btn btn-back" href="/">← 返回主界面</a>
+  </div>
+  <div class="sub">MusicFinder v4.20 账号治理 · 账号管理 / 邀请码 / 审计日志</div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="users">账号管理</button>
+    <button class="tab" data-tab="invites">邀请码 <span class="badge" id="inviteBadge">0</span></button>
+    <button class="tab" data-tab="audit">审计日志</button>
+    <button class="tab" data-tab="aliases">艺人别名</button>
+  </div>
+
+  <!-- Tab1: 账号管理 -->
+  <div class="panel active" id="panel-users">
+    <div class="notice">
+      ⚠️ 禁用账号后该用户将无法登录（数据保留，可再次启用）；删除账号会一并清除其全部个人数据且<strong>不可恢复</strong>；重置密码会覆盖原密码。删除/禁用最后一个管理员账号被系统禁止。
+    </div>
+    <div class="toolbar" style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="btn" id="btnSyncUsers" style="padding:8px 18px;">☁️ 上传本机账号到云端</button>
+      <span class="muted" style="font-size:12px;color:var(--muted, #9aa0a6);">把本机全部账号（含密码哈希）同步到云端，其他设备可据此登录。已存在的账号会被覆盖更新。</span>
+    </div>
+    <div id="tableHost"><div class="state">加载中…</div></div>
+  </div>
+
+  <!-- Tab2: 邀请码 -->
+  <div class="panel" id="panel-invites">
+    <div class="invite-box">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;">发邀请码</div>
+      <div class="invite-row">
+        <div class="invite-field" style="flex:0 0 100px;">
+          <label>数量</label>
+          <input type="number" id="inviteCount" value="1" min="1" max="20">
+        </div>
+        <div class="invite-field" style="flex:1;min-width:200px;">
+          <label>备注（可选）</label>
+          <input type="text" id="inviteNote" placeholder="如：给XX同事用" maxlength="200">
+        </div>
+        <button class="btn" id="btnGenInvite" style="padding:8px 18px;">生成邀请码</button>
+      </div>
+      <div id="inviteResult" style="margin-top:14px;"></div>
+    </div>
+    <div class="notice">邀请码用完即废，一个码只能注册一个账号。注册后需联系你获取邀请码。</div>
+    <div id="inviteTableHost"><div class="state">加载中…</div></div>
+  </div>
+
+  <!-- Tab3: 审计日志 -->
+  <div class="panel" id="panel-audit">
+    <div class="audit-filter">
+      <button class="act active" data-filter="">全部</button>
+      <button class="act" data-filter="ok">仅成功</button>
+      <button class="act" data-filter="denied">仅失败/拒绝</button>
+    </div>
+    <div id="auditHost"><div class="state">加载中…</div></div>
+  </div>
+
+  <!-- Tab4: 艺人别名 -->
+  <div class="panel" id="panel-aliases">
+    <div class="invite-box">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;">添加艺人别名（同人不同账号认回）</div>
+      <div class="invite-row">
+        <div class="invite-field" style="flex:1;min-width:160px;">
+          <label>本名（曲库里的艺人）</label>
+          <input type="text" id="aliasBase" placeholder="如：钦觉" maxlength="40">
+        </div>
+        <div class="invite-field" style="flex:1;min-width:160px;">
+          <label>别名 / 变体账号</label>
+          <input type="text" id="aliasAlias" placeholder="如：钦觉呀" maxlength="40">
+        </div>
+        <button class="btn" id="btnAddAlias" style="padding:8px 18px;">添加</button>
+      </div>
+      <div class="notice">用于「同一艺人在不同平台用不同账号发歌」的场景。例：钦觉在 QQ/酷狗用「钦觉呀」发歌，加一条「钦觉 → 钦觉呀」后，批量扫描会把「钦觉呀」认回成钦觉本人，不再误判为「未收录 / 非目标艺人」。<strong>只加你确认真是同一个人</strong>的账号，别加冒名翻唱。</div>
+      <div id="aliasResult" style="margin-top:14px;"></div>
+    </div>
+    <!-- 待确认建议：系统自动发现「疑似同一人」的配对，你点一下批准即可 -->
+    <div class="invite-box" style="margin-top:18px;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:6px;">待确认建议（系统自动发现的可能同一人）</div>
+      <div class="notice" style="margin-bottom:10px;">批量扫描时发现「歌名相似 + 歌手名相似但没自动认回」的候选，会汇总到这里。你一眼审核：确认是同一个人就点「批准」（并入上方白名单，以后自动认）；不是就点「忽略」。</div>
+      <div id="aliasSugHost"><div class="state">加载中…</div></div>
+    </div>
+    <div id="aliasTableHost"><div class="state">加载中…</div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+function toast(msg, isErr){
+  const t = $('#toast'); t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '');
+  setTimeout(()=> t.className = 'toast', 2200);
+}
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtTs(ts){
+  if(!ts) return '—';
+  const d = new Date(ts * 1000);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+
+    ' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+}
+
+/* Tab 切换 */
+$('.tabs').addEventListener('click', (e)=>{
+  const tab = e.target.closest('.tab');
+  if(!tab) return;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  tab.classList.add('active');
+  $('#panel-'+tab.dataset.tab).classList.add('active');
+  if(tab.dataset.tab === 'invites') loadInvites();
+  if(tab.dataset.tab === 'audit') loadAudit('');
+  if(tab.dataset.tab === 'aliases') loadAliases();
+});
+
+/* === 一键上传本机账号到云端 === */
+$('#btnSyncUsers').addEventListener('click', async ()=>{
+  if(!confirm('将本机全部账号上传到云端？\n已存在的账号会被覆盖更新（含密码哈希），其他设备可据此登录。')) return;
+  const btn = $('#btnSyncUsers'); btn.disabled = true; const old = btn.textContent; btn.textContent = '同步中…';
+  try{
+    const r = await fetch('/api/admin/sync_local_users', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if(!r.ok || !d.ok){ toast('同步失败：' + (d.error || r.status), true); }
+    else {
+      const n = (d.synced || []).length, t = d.total || 0, f = (d.failed || []).length;
+      toast('已上传 ' + n + '/' + t + ' 个账号到云端' + (f ? '，' + f + ' 个失败' : ''));
+      load();
+    }
+  }catch(e){ toast('网络错误：' + e.message, true); }
+  finally{ btn.disabled = false; btn.textContent = old; }
+});
+
+/* === 账号管理 === */
+async function load(){
+  const host = $('#tableHost');
+  host.innerHTML = '<div class="state">加载中…</div>';
+  try{
+    const r = await fetch('/api/admin/users', {cache:'no-store'});
+    const d = await r.json();
+    if(!r.ok || !d.ok){ host.innerHTML = '<div class="state err">加载失败：' + esc(d.error || r.status) + '</div>'; return; }
+    $('#curAdmin').textContent = d.current || '—';
+    window.__adminUsersCache = d.users;
+    render(d.users, d.current);
+  }catch(e){
+    host.innerHTML = '<div class="state err">网络错误：' + esc(e.message) + '</div>';
+  }
+}
+function render(users, current){
+  if(!users.length){
+    $('#tableHost').innerHTML = '<div class="state">暂无其他账号</div>'; return;
+  }
+    const rows = users.map(u => {
+      const isMe = u.username === current;
+      const role = u.is_admin ? '<span class="tag tag-admin">管理员</span>' : '<span class="tag tag-user">普通</span>';
+      const state = u.disabled ? '<span class="tag tag-off">已禁用</span>' : '<span class="tag tag-on">启用</span>';
+      const perms = u.perms || {view_all_marks:true, manage_marks:false};
+      const permsBadges = u.is_admin
+        ? ''
+        : '<div class="perms">' +
+          (perms.view_all_marks ? '<span class="tag tag-on">👁 看共享</span>' : '<span class="tag tag-off">🚫 隐藏</span>') +
+          (perms.manage_marks ? '<span class="tag tag-admin">🔑 管他人</span>' : '<span class="tag tag-user">只读</span>') +
+          '</div>';
+      const roleCell = role + permsBadges;
+      const stats = '<div class="stats">' +
+        '<span class="stat">歌单 <b>' + (u.stats.playlist||0) + '</b></span>' +
+        '<span class="stat">标记 <b>' + (u.stats.marks||0) + '</b></span>' +
+        '<span class="stat">固定 <b>' + (u.stats.pins||0) + '</b></span>' +
+        '<span class="stat">红心 <b>' + (u.stats.hearts||0) + '</b></span></div>';
+      const disBtn = u.disabled ? '启用' : '禁用';
+      let actionsHtml;
+      if (u.is_admin) {
+        actionsHtml = '<span class="stat">（管理员 · 全部权限）</span>' +
+          '<button class="act" data-act="reset" data-u="'+esc(u.username)+'"'+(isMe?'':' disabled')+'>重置密码</button>';
+      } else if (isMe) {
+        actionsHtml = '<span class="stat">（当前账号）</span>';
+      } else {
+        actionsHtml = '<button class="act" data-act="toggle" data-u="'+esc(u.username)+'">'+disBtn+'</button>' +
+          '<button class="act" data-act="reset" data-u="'+esc(u.username)+'">重置密码</button>' +
+          '<button class="act" data-act="perms" data-u="'+esc(u.username)+'">🔑 权限</button>' +
+          '<button class="act act-danger" data-act="del" data-u="'+esc(u.username)+'">删除</button>';
+      }
+      return '<tr>' +
+        '<td><b>'+esc(u.username)+'</b></td><td>'+roleCell+'</td><td>'+state+'</td>' +
+        '<td>'+esc(u.created_at||'—')+'</td><td>'+esc(u.last_login||'从未登录')+'</td>' +
+        '<td>'+stats+'</td><td><div class="actions">'+actionsHtml+'</div></td></tr>';
+    }).join('');
+  $('#tableHost').innerHTML =
+    '<table><thead><tr><th>账号</th><th>角色</th><th>状态</th><th>创建时间</th><th>最后登录</th><th>数据统计</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+$('#tableHost').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-act]');
+  if(!btn) return;
+  const act = btn.dataset.act, u = btn.dataset.u;
+  if(act === 'toggle'){
+    if(!confirm('确定'+(btn.textContent==='禁用'?'禁用':'启用')+'账号「'+u+'」？')) return;
+    await apiCall('/api/admin/user/toggle_disable', {username:u}, '状态已更新');
+  }else if(act === 'reset'){
+    const pw = prompt('为账号「'+u+'」设置新密码（至少 4 位）：');
+    if(pw === null) return;
+    if(pw.length < 4){ toast('密码至少 4 位', true); return; }
+    await apiCall('/api/admin/user/reset_password', {username:u, password:pw}, '密码已重置');
+  }else if(act === 'del'){
+    if(!confirm('⚠️ 确定删除账号「'+u+'」？\n其全部个人数据将被永久清除，不可恢复！')) return;
+    if(!confirm('再次确认：真的要删除「'+u+'」吗？')) return;
+    await apiCall('/api/admin/user/delete', {username:u}, '账号已删除');
+  }else if(act === 'perms'){
+    openPermsModal(u);
+  }
+});
+
+/* === 标记权限弹窗 === */
+function openPermsModal(username){
+  const users = window.__adminUsersCache || [];
+  const u = users.find(x => x.username === username) || {};
+  const perms = u.perms || {view_all_marks:true, manage_marks:false};
+  const html = ''
+    + '<div class="modal-overlay" id="permsOverlay">'
+    +   '<div class="modal">'
+    +     '<h3>标记权限 · '+esc(username)+'</h3>'
+    +     '<p class="muted">设置该账号在「🌐 共享」标记视图下的权限。管理员账号恒拥有全部权限，无需单独设置。</p>'
+    +     '<div class="perm-row">'
+    +       '<input type="checkbox" id="permView" '+((perms.view_all_marks?'checked':'')+'>')
+    +       '<div><div class="pr-label">👁 看共享标记</div><div class="pr-desc">允许在共享视图里看到其他账号的标记（默认开启）</div></div>'
+    +     '</div>'
+    +     '<div class="perm-row">'
+    +       '<input type="checkbox" id="permManage" '+((perms.manage_marks?'checked':'')+'>')
+    +       '<div><div class="pr-label">🔑 管理他人标记</div><div class="pr-desc">允许修改 / 删除别人打的标（默认关闭，谨慎开启）</div></div>'
+    +     '</div>'
+    +     '<div class="modal-actions">'
+    +       '<button class="act" id="permsCancel">取消</button>'
+    +       '<button class="act" id="permsSave" style="border-color:var(--accent);color:var(--accent-2)">保存</button>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>';
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap.firstElementChild);
+  const ov = document.getElementById('permsOverlay');
+  ov.querySelector('#permsCancel').addEventListener('click', ()=>ov.remove());
+  ov.addEventListener('click', (e)=>{ if(e.target === ov) ov.remove(); });
+  ov.querySelector('#permsSave').addEventListener('click', async ()=>{
+    const newPerms = {
+      view_all_marks: ov.querySelector('#permView').checked,
+      manage_marks: ov.querySelector('#permManage').checked,
+    };
+    ov.remove();
+    try{
+      const r = await fetch('/api/admin/user/set_perms', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({username: username, perms:newPerms})
+      });
+      const d = await r.json().catch(()=>({}));
+      if(r.ok && d.ok){ toast('权限已更新'); load(); }
+      else { toast(d.error || '保存失败', true); }
+    }catch(e){ toast('网络错误：'+e.message, true); }
+  });
+}
+
+/* === 邀请码管理 === */
+$('#btnGenInvite').addEventListener('click', async ()=>{
+  const count = parseInt($('#inviteCount').value) || 1;
+  const note = $('#inviteNote').value.trim();
+  $('#btnGenInvite').disabled = true;
+  try{
+    const r = await fetch('/api/admin/invite', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({count, note})
+    });
+    const d = await r.json();
+    if(r.ok && d.ok && d.codes){
+      const codesHtml = d.codes.map(c => '<span class="code-mono">'+esc(c)+'</span>').join(' &nbsp; ');
+      $('#inviteResult').innerHTML = '<div style="padding:10px 14px;background:var(--panel-2);border-radius:8px;border:1px solid var(--border);">'+
+        '✅ 已生成 '+d.codes.length+' 个邀请码：'+codesHtml+'<br><span style="font-size:12px;color:var(--muted)">复制发给需要的人即可</span></div>';
+      toast('已生成 '+d.codes.length+' 个邀请码');
+      loadInvites();
+    } else {
+      toast(d.error || '生成失败', true);
+      $('#inviteResult').innerHTML = '<div class="err">'+esc(d.error||'生成失败')+'</div>';
+    }
+  }catch(e){
+    toast('网络错误：'+e.message, true);
+  }
+  $('#btnGenInvite').disabled = false;
+});
+
+async function loadInvites(){
+  const host = $('#inviteTableHost');
+  host.innerHTML = '<div class="state">加载中…</div>';
+  try{
+    const r = await fetch('/api/admin/invites', {cache:'no-store'});
+    const d = await r.json();
+    if(!r.ok){ host.innerHTML = '<div class="state err">加载失败：'+esc(d.error||r.status)+'</div>'; return; }
+    if(d.note){ host.innerHTML = '<div class="state">'+esc(d.note)+'</div>'; return; }
+    const invites = d.invites || [];
+    $('#inviteBadge').textContent = invites.filter(i=>!i.used).length;
+    if(!invites.length){ host.innerHTML = '<div class="state">暂无邀请码，点上方「生成邀请码」创建</div>'; return; }
+    const rows = invites.map(i => {
+      const status = i.used
+        ? '<span class="tag tag-used">已用 · '+esc(i.used_by||'')+'</span>'
+        : '<span class="tag tag-fresh">可用</span>';
+      return '<tr><td><span class="code-mono">'+esc(i.code)+'</span></td>'+
+        '<td>'+status+'</td><td>'+esc(i.invited_by||'—')+'</td>'+
+        '<td>'+esc(i.note||'—')+'</td><td>'+fmtTs(i.created_at)+'</td>'+
+        '<td>'+(i.used_at?fmtTs(i.used_at):'—')+'</td></tr>';
+    }).join('');
+    host.innerHTML = '<table><thead><tr><th>邀请码</th><th>状态</th><th>发放人</th><th>备注</th><th>创建时间</th><th>使用时间</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }catch(e){
+    host.innerHTML = '<div class="state err">网络错误：'+esc(e.message)+'</div>';
+  }
+}
+
+/* === 审计日志 === */
+$('.audit-filter').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.act[data-filter]');
+  if(!btn) return;
+  document.querySelectorAll('.audit-filter .act').forEach(a=>a.classList.remove('active'));
+  btn.classList.add('active');
+  loadAudit(btn.dataset.filter);
+});
+async function loadAudit(filter){
+  const host = $('#auditHost');
+  host.innerHTML = '<div class="state">加载中…</div>';
+  let url = '/api/admin/audit?limit=500';
+  if(filter) url += '&result='+filter;
+  try{
+    const r = await fetch(url, {cache:'no-store'});
+    const d = await r.json();
+    if(!r.ok){ host.innerHTML = '<div class="state err">加载失败：'+esc(d.error||r.status)+'</div>'; return; }
+    if(d.note){ host.innerHTML = '<div class="state">'+esc(d.note)+'</div>'; return; }
+    const logs = d.logs || [];
+    if(!logs.length){ host.innerHTML = '<div class="state">暂无审计日志</div>'; return; }
+    const html = logs.map(l => {
+      const resCls = l.result === 'ok' ? 'res-ok' : 'res-denied';
+      const resLabel = l.result === 'ok' ? '✓' : '✗';
+      return '<div class="audit-entry">'+
+        '<span class="ts">'+fmtTs(l.ts)+'</span>'+
+        '<span class="who2">'+esc(l.username||'—')+'</span>'+
+        '<span class="act2">'+esc(l.action)+'</span>'+
+        '<span class="'+resCls+'">'+resLabel+' '+esc(l.result)+'</span>'+
+        '<span style="color:var(--muted);font-size:12px;">'+esc(l.ip||'')+'</span></div>';
+    }).join('');
+    host.innerHTML = '<div class="audit-log">'+html+'</div>';
+  }catch(e){
+    host.innerHTML = '<div class="state err">网络错误：'+esc(e.message)+'</div>';
+  }
+}
+
+/* === 艺人别名管理 === */
+$('#btnAddAlias').addEventListener('click', async ()=>{
+  const base = $('#aliasBase').value.trim();
+  const alias = $('#aliasAlias').value.trim();
+  if(!base || !alias){ toast('本名和别名都要填', true); return; }
+  $('#btnAddAlias').disabled = true;
+  try{
+    const r = await fetch('/api/admin/performer_aliases', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({base, alias})
+    });
+    const d = await r.json();
+    if(r.ok && d.ok){
+      $('#aliasBase').value=''; $('#aliasAlias').value='';
+      $('#aliasResult').innerHTML = '<div style="padding:10px 14px;background:var(--panel-2);border-radius:8px;border:1px solid var(--border);">✅ 已添加 '+esc(base)+' → '+esc(alias)+'</div>';
+      toast('已添加别名');
+      loadAliases();
+    } else {
+      toast(d.error || '添加失败', true);
+      $('#aliasResult').innerHTML = '<div class="err">'+esc(d.error||'添加失败')+'</div>';
+    }
+  }catch(e){
+    toast('网络错误：'+e.message, true);
+  }
+  $('#btnAddAlias').disabled = false;
+});
+
+$('#aliasTableHost').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('.del-alias');
+  if(!btn) return;
+  const base = btn.dataset.base, alias = btn.dataset.alias;
+  if(!confirm('确定删除 「'+base+' → '+alias+'」 这条别名？')) return;
+  try{
+    const r = await fetch('/api/admin/performer_aliases', {
+      method:'DELETE', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({base, alias})
+    });
+    const d = await r.json();
+    if(r.ok && d.ok){ toast('已删除'); loadAliases(); }
+    else toast(d.error||'删除失败', true);
+  }catch(e){ toast('网络错误：'+e.message, true); }
+});
+
+async function loadAliases(){
+  const host = $('#aliasTableHost');
+  host.innerHTML = '<div class="state">加载中…</div>';
+  try{
+    const r = await fetch('/api/admin/performer_aliases', {cache:'no-store'});
+    const d = await r.json();
+    if(!r.ok){ host.innerHTML = '<div class="state err">加载失败：'+esc(d.error||r.status)+'</div>'; return; }
+    const aliases = d.aliases || {};
+    const keys = Object.keys(aliases);
+    if(!keys.length){ host.innerHTML = '<div class="state">暂无别名，上方添加一条（例：钦觉 → 钦觉呀）</div>'; }
+    else {
+      const rows = keys.map(base => {
+        const list = (aliases[base]||[]).map(a =>
+          '<span class="tag tag-fresh" style="margin:2px 4px 2px 0;display:inline-flex;align-items:center;gap:6px;">'+esc(a)+
+          ' <span class="del-alias" data-base="'+esc(base)+'" data-alias="'+esc(a)+'" style="cursor:pointer;color:#e5484d;font-weight:700;">✕</span></span>'
+        ).join('');
+        return '<tr><td style="font-weight:600;white-space:nowrap;">'+esc(base)+'</td><td>'+list+'</td></tr>';
+      }).join('');
+      host.innerHTML = '<table><thead><tr><th>本名</th><th>别名 / 变体账号</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    }
+    // 待确认建议
+    renderAliasSuggestions(d.suggestions || []);
+  }catch(e){
+    host.innerHTML = '<div class="state err">网络错误：'+esc(e.message)+'</div>';
+  }
+}
+
+function renderAliasSuggestions(sugs){
+  const host = $('#aliasSugHost');
+  if(!host) return;
+  if(!sugs.length){ host.innerHTML = '<div class="state">暂无待确认建议。批量扫描遇到「疑似同一人」的候选会自动出现在这里。</div>'; return; }
+  const rows = sugs.map(s => {
+    const song = s.song ? '（代表歌《'+esc(s.song)+'》）' : '';
+    const cnt = s.count > 1 ? ' · 命中'+s.count+'次' : '';
+    return '<tr>'+
+      '<td style="font-weight:600;white-space:nowrap;">'+esc(s.base)+'</td>'+
+      '<td style="white-space:nowrap;">'+esc(s.alias)+'</td>'+
+      '<td style="color:var(--text-2);font-size:13px;">'+song+cnt+'</td>'+
+      '<td><div class="actions">'+
+        '<button class="act act-ok" data-base="'+esc(s.base)+'" data-alias="'+esc(s.alias)+'">批准</button>'+
+        '<button class="act act-danger" data-base="'+esc(s.base)+'" data-alias="'+esc(s.alias)+'">忽略</button>'+
+      '</div></td></tr>';
+  }).join('');
+  host.innerHTML = '<table><thead><tr><th>曲库本名</th><th>平台显示的歌手</th><th>线索</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+$('#aliasSugHost').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-base]');
+  if(!btn) return;
+  const base = btn.dataset.base, alias = btn.dataset.alias;
+  try{
+    if(btn.classList.contains('act-ok')){
+      if(!confirm('确认「'+base+'」与「'+alias+'」是同一人？\n批准后系统以后会自动把「'+alias+'」认回成「'+base+'」。')) return;
+      const r = await fetch('/api/admin/performer_aliases', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({base, alias})
+      });
+      const d = await r.json();
+      if(r.ok && d.ok){ toast('已批准并并入白名单'); loadAliases(); }
+      else toast(d.error||'操作失败', true);
+    } else {
+      if(!confirm('忽略「'+base+' → '+alias+'」这条建议？（仅从待确认列表移除）')) return;
+      const r = await fetch('/api/admin/performer_alias_suggestions/dismiss', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({base, alias})
+      });
+      const d = await r.json();
+      if(r.ok && d.ok){ toast('已忽略'); loadAliases(); }
+      else toast(d.error||'操作失败', true);
+    }
+  }catch(e){ toast('网络错误：'+e.message, true); }
+});
+
+async function apiCall(url, body, okMsg){
+  try{
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const d = await r.json().catch(()=>({}));
+    if(r.ok && d.ok){ toast(okMsg); load(); }
+    else { toast(d.error || ('操作失败 '+r.status), true); }
+  }catch(e){ toast('网络错误：'+e.message, true); }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MusicFinder — 多平台音乐搜索 & 红心管理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260819f') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/batch-embed.css', v='20260807n') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/playlist-marks.css', v='20260819d') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/monitor.css', v='20260815c') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/evidence.css', v='20260812a') }}">
+</head>
+<body>
+
+<!-- 背景装饰 -->
+<div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+</div>
+
+<!-- 顶部导航 -->
+<header class="topbar">
+    <div class="logo">
+        <div class="logo-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"/>
+                <circle cx="6" cy="18" r="3"/>
+                <circle cx="18" cy="16" r="3"/>
+            </svg>
+        </div>
+        <span class="logo-text">MusicFinder</span>
+        <span class="logo-badge" id="logoVersion" title="MusicFinder 当前版本号（点击查看完整版本）">v4</span>
+        <span class="sync-badge" id="syncBadge" title="标记同步状态">
+            <span class="sync-dot"></span><span id="syncText">标记同步</span>
+        </span>
+    </div>
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <!-- v4.27.12：去掉原来的 icon-system（显示器）图标，按钮只显示 太阳 / 月亮 -->
+    </button>
+    <div class="user-area" id="userArea" hidden>
+        <span class="user-name" id="userName"></span>
+        <button class="btn-user-admin" id="adminBtn" hidden title="账号管理后台">👥 账号管理</button>
+        <button class="btn-restart-svc" id="restartSvcBtn" hidden title="重启本服务（加载最新代码，免 sudo）">🔄 重启</button>
+        <button class="btn-user-logout" id="userLogoutBtn" title="退出当前账号">退出</button>
+    </div>
+</header>
+
+<!-- 全局批量任务进度条已移除（v4.25.20）：搜索进度请到「批量歌单」页查看 -->
+
+<!-- 主区域 -->
+<main class="main">
+
+    <!-- 标签页导航 -->
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span>音乐搜索</span>
+        </button>
+        <button class="tab-btn" data-tab="batch">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            <span>批量歌单</span>
+        </button>
+        <button class="tab-btn" data-tab="hearts">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            <span>红心管理</span>
+        </button>
+        <button class="tab-btn" data-tab="settings">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Cookie 设置</span>
+        </button>
+        <button class="tab-btn" data-tab="marks">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>标记歌曲</span>
+        </button>
+        <button class="tab-btn" data-tab="playlist">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            <span>我的歌单</span>
+        </button>
+        <button class="tab-btn" data-tab="monitor">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            <span>数据监控</span>
+            <span class="tab-dot" id="monTabDot" hidden></span>
+        </button>
+        <button class="tab-btn" data-tab="evidence">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M8 11h6"/>
+            </svg>
+            <span>证据监测</span>
+        </button>
+        <button class="tab-btn" data-tab="report">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+            </svg>
+            <span>运营报告</span>
+        </button>
+    </nav>
+
+    <!-- ═══ 搜索标签页 ═══ -->
+    <section class="tab-content active" id="tab-search">
+        <div class="hero">
+            <h1 class="hero-title" id="searchHeroTitle">多平台音乐搜索</h1>
+            <p class="hero-subtitle" id="searchHeroSub">以歌名为核心匹配，一键聚合 QQ音乐 · 酷狗 · 酷我 · 网易云 · 汽水音乐</p>
+
+            <div class="search-mode-tabs" id="searchModeTabs">
+                <button class="mode-tab active" data-mode="song" type="button">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <span>歌名搜索</span>
+                </button>
+                <button class="mode-tab" data-mode="lyric" type="button">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 5h16M4 5v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5M9 9h6M9 13h6"/>
+                    </svg>
+                    <span>歌词识别</span>
+                </button>
+            </div>
+
+            <div class="search-card glass">
+            <div class="mode-panel active" data-mode="song">
+
+                <div class="search-fields search-fields-four">
+                    <div class="field-group">
+                        <label class="field-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                            </svg>
+                            歌曲名称
+                        </label>
+                        <input type="text" id="songName" class="field-input" placeholder="例如：晴天（必填）" autocomplete="off">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            词作者
+                        </label>
+                        <input type="text" id="lyricist" class="field-input" placeholder="例如：方文山（可选）" autocomplete="off">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                            </svg>
+                            曲作者
+                        </label>
+                        <input type="text" id="composer" class="field-input" placeholder="例如：周杰伦（可选）" autocomplete="off">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            表演者
+                        </label>
+                        <input type="text" id="performer" class="field-input" placeholder="例如：周杰伦（可选）" autocomplete="off">
+                    </div>
+                </div>
+                <div class="search-options">
+                    <div class="limit-selector">
+                        <span class="limit-label" title="每平台实际抓取≥此数（≤500时不打折，保证数据池够大），按相关性排序后展示。">每平台上限</span>
+                        <div class="limit-chips">
+                            <button class="limit-chip" data-limit="10">10</button>
+                            <button class="limit-chip" data-limit="30">30</button>
+                            <button class="limit-chip" data-limit="50">50</button>
+                            <button class="limit-chip active" data-limit="100">100</button>
+                            <button class="limit-chip" data-limit="500">500</button>
+                        </div>
+                    </div>
+                    <div class="search-actions">
+                        <button class="reset-btn" id="resetSearchBtn" type="button" title="清空所有搜索条件并还原默认上限 100">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                            </svg>
+                            <span>重置</span>
+                        </button>
+                        <button class="search-btn" id="searchBtn">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <span>搜索</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 链接直查（v4.17.6）：粘贴平台歌曲链接直接收录该单曲 -->
+                <div class="url-lookup">
+                    <div class="url-lookup-sep"><span>或直接粘贴歌曲链接直接查</span></div>
+                    <div class="url-lookup-bar">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <input type="text" id="songUrl" class="field-input url-input" placeholder="粘贴 QQ/酷狗/酷我/网易云 歌曲分享链接，直接收录该单曲（如 c6.y.qq.com/...）" autocomplete="off">
+                        <button class="search-btn sm" id="lookupUrlBtn" type="button">直查</button>
+                    </div>
+                    <div class="url-lookup-msg" id="lookupUrlMsg"></div>
+                </div>
+            </div>
+
+            <!-- 平台状态条 -->
+            <div class="platform-strip" id="platformStrip">
+                <div class="platform-pill" data-code="qq">
+                    <span class="platform-dot" style="background: #31c27c"></span>
+                    <span class="platform-name">QQ音乐</span>
+                    <span class="platform-count" id="count-qq">—</span>
+                </div>
+                <div class="platform-pill" data-code="kugou">
+                    <span class="platform-dot" style="background: #2ca2f9"></span>
+                    <span class="platform-name">酷狗音乐</span>
+                    <span class="platform-count" id="count-kugou">—</span>
+                </div>
+                <div class="platform-pill" data-code="kuwo">
+                    <span class="platform-dot" style="background: #ff9a00"></span>
+                    <span class="platform-name">酷我音乐</span>
+                    <span class="platform-count" id="count-kuwo">—</span>
+                </div>
+                <div class="platform-pill" data-code="netease">
+                    <span class="platform-dot" style="background: #e60026"></span>
+                    <span class="platform-name">网易云音乐</span>
+                    <span class="platform-count" id="count-netease">—</span>
+                </div>
+                <div class="platform-pill" data-code="qishui">
+                    <span class="platform-dot" style="background: #00d4d4"></span>
+                    <span class="platform-name">汽水音乐</span>
+                    <span class="platform-count" id="count-qishui">—</span>
+                </div>
+            </div>
+
+            <!-- 搜索进度提示（v4.27.8：黑盒 35 秒 → 真实进度反馈，避免用户以为失败） -->
+            <div class="search-progress" id="searchProgress" hidden>
+                <div class="sp-spinner"></div>
+                <div class="sp-text">
+                    <div class="sp-title">⏳ 正在查询 5 个音乐平台（QQ · 酷狗 · 酷我 · 网易云 · 汽水）</div>
+                    <div class="sp-sub" id="searchProgressSub">多平台并发抓取较慢，通常 15~40 秒，请稍候，不要刷新页面…</div>
+                </div>
+                <div class="sp-timer" id="searchProgressTimer">已等待 0 秒</div>
+                <button type="button" class="sp-cancel" id="searchCancelBtn">取消搜索</button>
+            </div>
+
+            <!-- 数据可用性说明（v4.26.4b 已删除：原文过长且冗余，关键信息已迁移到各平台 pill 的 hover title 上） -->
+
+            <div class="mode-panel" data-mode="lyric" style="display:none">
+                <div class="lyric-input-area">
+                    <label class="field-label">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        歌词文本（同一首歌的多段歌词用空行分隔）
+                    </label>
+                    <textarea id="lyricInput" class="lyric-textarea" placeholder="例如：&#10;&#10;其实雨也没多大&#10;是风在拼命刮&#10;&#10;没有多难没有遗憾&#10;只是眼泪泛滥"></textarea>
+                    <div class="lyric-opts">
+                        <label class="chk"><input type="checkbox" id="lyricSameSound" checked> 同音字容错（片段模糊匹配）</label>
+                        <span class="lyric-hint">提示：单段歌词至少 4 个字；段落越多耗时越长（每首约几秒）</span>
+                    </div>
+                </div>
+                <div class="lyric-actions">
+                    <button type="button" class="btn-primary" id="lyricIdentifyBtn">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <span>识别歌曲版本</span>
+                    </button>
+                    <button type="button" class="btn-ghost" id="lyricClearBtn">清空</button>
+                    <span id="lyricStatus" class="lyric-status"></span>
+                </div>
+            </div>
+
+</div>
+        </div>
+
+        <!-- 结果区 -->
+        <section class="results-section" id="resultsSection" style="display:none">
+            <!-- 结果工具栏 -->
+            <div class="results-toolbar" id="resultsToolbar">
+                <div class="toolbar-left">
+                    <span class="results-total" id="resultsTotal"></span>
+                    <div class="sort-control" id="sortControl">
+                        <span class="sort-label">排序</span>
+                        <select id="sortKey" class="sort-select">
+                            <option value="match_score">匹配度</option>
+                            <option value="collection_count">收藏量</option>
+                            <option value="listening_count">在听</option>
+                            <option value="comment_count">评论</option>
+                            <option value="song_name">歌名</option>
+                            <option value="performer">歌手</option>
+                            <option value="album">专辑</option>
+                            <option value="release_date">发行时间</option>
+                            <option value="lyricist">词作者</option>
+                            <option value="composer">曲作者</option>
+                        </select>
+                        <select id="sortScope" class="sort-select sort-scope">
+                            <option value="max">各平台最高</option>
+                            <option value="qq">仅 QQ</option>
+                            <option value="kugou">仅酷狗</option>
+                            <option value="kuwo">仅酷我</option>
+                            <option value="netease">仅网易云</option>
+                            <option value="qishui">仅汽水</option>
+                        </select>
+                        <button id="sortDir" class="sort-dir-btn" title="切换升序/降序" type="button">▼</button>
+                    </div>
+                    <button class="export-btn" id="exportBtn" title="导出 CSV">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        导出 CSV
+                    </button>
+                    <button class="mark-toggle-btn" id="markToggle" type="button" title="只看已手动标记的歌曲">
+                        只看标记 <span class="mark-toggle-count" id="markCount">0</span>
+                    </button>
+                    <button class="mark-io-btn" id="exportMarksBtn" type="button" title="导出标记备份（可跨设备/跨版本迁移）">导出标记</button>
+                    <button class="mark-io-btn" id="importMarksBtn" type="button" title="导入标记备份">导入标记</button>
+                    <input type="file" id="importMarksFile" accept=".json,application/json" hidden>
+                    <button class="mark-toggle-btn" id="heartToggle" type="button" title="只看收藏过红心的歌（任一平台）">
+                        只看红心 <span class="mark-toggle-count" id="heartCount">0</span>
+                    </button>
+                    <span class="toolbar-sep"></span>
+                    <button class="mark-toggle-btn piracy" id="suspectToggle" type="button" title="只看系统分析的疑似盗版/翻唱版本">
+                        疑似盗版 <span class="mark-toggle-count" id="suspectCount">0</span>
+                    </button>
+                    <button class="mark-toggle-btn piracy" id="unprocessedToggle" type="button" title="只看标记为「未打盗版」的歌曲">
+                        未打盗版 <span class="mark-toggle-count" id="unprocessedCount">0</span>
+                    </button>
+                    <button class="mark-toggle-btn piracy" id="processedToggle" type="button" title="只看标记为「已打盗版」的歌曲">
+                        已打盗版 <span class="mark-toggle-count" id="processedCount">0</span>
+                    </button>
+                </div>
+                <div class="toolbar-right" id="platformFilter">
+                    <button class="filter-chip active" data-filter="all">全部</button>
+                    <button class="filter-chip" data-filter="qq"><span class="chip-dot" style="background:#31c27c"></span>QQ音乐<span class="chip-count" id="filter-count-qq"></span></button>
+                    <button class="filter-chip" data-filter="kugou"><span class="chip-dot" style="background:#2ca2f9"></span>酷狗<span class="chip-count" id="filter-count-kugou"></span></button>
+                    <button class="filter-chip" data-filter="kuwo"><span class="chip-dot" style="background:#ff9a00"></span>酷我<span class="chip-count" id="filter-count-kuwo"></span></button>
+                    <button class="filter-chip" data-filter="netease"><span class="chip-dot" style="background:#e60026"></span>网易云<span class="chip-count" id="filter-count-netease"></span></button>
+                    <button class="filter-chip" data-filter="qishui"><span class="chip-dot" style="background:#00d4d4"></span>汽水<span class="chip-count" id="filter-count-qishui"></span></button>
+                </div>
+            </div>
+
+            <!-- v4.22 歌曲合并批量操作栏（勾选 ≥2 首时出现） -->
+            <div class="merge-action-bar" id="mergeActionBar" style="display:none">
+                <span class="merge-sel-count" id="mergeSelCount">已选 0 首</span>
+                <button class="merge-selected-btn" id="mergeSelectedBtn" type="button" disabled>合并所选为同一首</button>
+                <button class="merge-clear-btn" id="mergeClearBtn" type="button">取消选择</button>
+            </div>
+
+            <!-- 数据状态图例 -->
+            <div class="data-legend">
+                <span class="legend-item"><span class="legend-dot ok"></span>已抓到数据</span>
+                <span class="legend-item"><span class="legend-dot nodata"></span>平台无数据（平台本身没提供）</span>
+                <span class="legend-item"><span class="legend-dot error"></span>抓取失败（程序问题，可重试）</span>
+            </div>
+
+            <!-- 平台告警横幅 -->
+            <div class="warning-box" id="warningBox" style="display:none"></div>
+
+            <!-- 结果表格：每首歌一行，左侧信息列 + 右侧五大平台列 -->
+            <div class="table-wrap glass" id="tableWrap">
+                <table class="results-table grouped" id="resultsTable">
+                    <colgroup>
+                        <col class="col-song">
+                        <col class="col-artist">
+                        <col class="col-album">
+                        <col class="col-release">
+                        <col class="col-lyricist">
+                        <col class="col-composer">
+                        <col class="col-source">
+                        <col class="col-mark">
+                        <col class="col-platform">
+                        <col class="col-platform">
+                        <col class="col-platform">
+                        <col class="col-platform">
+                        <col class="col-platform">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="th-song sortable" data-sort="song_name">歌曲名</th>
+                            <th class="th-artist sortable" data-sort="performer">歌手</th>
+                            <th class="th-album sortable" data-sort="album">专辑</th>
+                            <th class="th-release sortable" data-sort="release_date">发行时间</th>
+                            <th class="th-lyricist sortable" data-sort="lyricist">词作者</th>
+                            <th class="th-composer sortable" data-sort="composer">曲作者</th>
+                            <th class="th-source">匹配来源</th>
+                            <th class="th-mark">标记</th>
+                            <th class="th-platform" data-code="qq"><span class="plat-th-dot" style="background:#31c27c"></span>Q音</th>
+                            <th class="th-platform" data-code="kugou"><span class="plat-th-dot" style="background:#2ca2f9"></span>酷狗</th>
+                            <th class="th-platform" data-code="kuwo"><span class="plat-th-dot" style="background:#ff9a00"></span>酷我</th>
+                            <th class="th-platform" data-code="netease"><span class="plat-th-dot" style="background:#e60026"></span>网易</th>
+                            <th class="th-platform" data-code="qishui"><span class="plat-th-dot" style="background:#00d4d4"></span>汽水</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                </table>
+            </div>
+
+            <!-- 空状态 -->
+            <div class="empty-state" id="emptyState" style="display:none">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <p>未找到相关歌曲</p>
+                <span>试试调整关键词或检查词曲作者信息</span>
+            </div>
+
+            <!-- v4.23 「完全无匹配」结果折叠区（按钮 + 展开后的卡片容器） -->
+            <div id="irrelevantFooter" class="irrelevant-footer" style="display:none"></div>
+            <div id="irrelevantInlineWrap" class="irrelevant-inline-wrap" style="display:none"></div>
+
+            <!-- v4.22 歌曲合并弹窗 -->
+            <div class="modal-overlay" id="mergeModal" style="display:none">
+                <div class="modal merge-modal">
+                    <h3 class="modal-title">合并为同一首歌</h3>
+                    <p class="modal-desc">同一首歌因各平台艺名写法不同被拆成多条？勾选后合并为一首方便管理。<br>请选择哪一首作为<b>「正主」</b>：歌名、艺人、标记（正版/盗版判定）以它为准，其余各平台数据并入。</p>
+                    <div class="merge-modal-list" id="mergeModalList"></div>
+                    <div class="modal-actions">
+                        <button class="modal-btn primary" id="mergeConfirmBtn" type="button">确认合并</button>
+                        <button class="modal-btn" id="mergeCancelBtn" type="button">取消</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 标记弹窗（手动标记歌曲） -->
+        </section>
+    </section>
+
+    <!-- ═══ Cookie 设置标签页 ═══ -->
+    <section class="tab-content" id="tab-settings">
+        <div class="hero">
+            <h1 class="hero-title">Cookie & 登录态</h1>
+            <p class="hero-subtitle">配置各平台 Cookie 以获取更完整的数据（词曲作者、收藏量、评论数等需要登录态）</p>
+        </div>
+
+        <div class="login-methods-note glass">
+            <span class="lm-tag">登录方式一</span> 点各平台卡片里的「浏览器登录」按钮，会自动打开该平台登录页；登录后按 <kbd>F12</kbd> 复制 Cookie 粘贴保存。
+            <span class="lm-sep">·</span>
+            <span class="lm-tag">登录方式二</span> 自己获取：点「打开登录页」登录后，按 <kbd>F12</kbd> 复制 Cookie 粘贴保存（每台设备独立）。
+        </div>
+
+        <div class="settings-list" id="settingsList">
+            <!-- Cookie 配置卡片由 JS 动态生成 -->
+        </div>
+
+        <div class="settings-help glass">
+            <h3 class="settings-help-title">手动获取 Cookie 的详细步骤（小白版）</h3>
+            <ol class="settings-help-steps">
+                <li>在上面五张平台卡片里，<strong>点你想登录的平台卡片里的「打开登录页」</strong>按钮，会自动新开一个登录标签页</li>
+                <li>在那个新标签页里<strong>正常登录</strong>你的账号（密码、微信扫码、手机号都行）</li>
+                <li>登录成功后，<strong>按一下 F5 / 刷新一下当前页面</strong>，让浏览器把登录信息完整记录</li>
+                <li>按 <kbd>F12</kbd> 打开开发者工具 → 顶部切到 <strong>网络 / Network</strong> 标签</li>
+                <li>左侧请求列表里<strong>随便点一条</strong>（第一条就行），右边面板往下拉，在 <strong>Request Headers</strong> 区域里找一行 <code>Cookie:</code></li>
+                <li><strong>双击</strong>那行 <code>Cookie:</code> 后面那串字符让它全选 → <kbd>Ctrl</kbd>+<kbd>C</kbd>（Mac 是 <kbd>⌘</kbd>+<kbd>C</kbd>）复制</li>
+                <li>回到这一页 → <strong>粘贴到上方对应平台的输入框</strong> → 点「保存 Cookie」</li>
+            </ol>
+            <div class="settings-help-note">
+                <strong>看不明白「Cookie 是啥」？</strong>打个比方：每条 Cookie 都是一张「我是登录用户 x」的小纸条，<code>Cookie:</code> 后面那串字符是一叠小纸条拼起来的长串，长得跟 <code>p_skey=abc123; uin=12345; skey=xyz789; ...</code> 类似。复制的应该是<strong>几百到几千字符</strong>、中间带 <code>;</code> 的那种——不要复制成空的，也不要复制成单个字段。
+                <br><br>
+                <strong>自动不行？</strong>点平台卡片里的「浏览器登录」按钮是首选（密码登录会自动抓）。<strong>微信扫码、手机号验证码</strong>这俩方式自动抓不到（要跳到微信 app / 收短信，浏览器没法监听），请用上面手动步骤。
+                <br><br>
+                <strong>Cookie 会过期？</strong>对，一般几周就过期。届时再按这套步骤重新抓一次就行。
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ 批量歌单标签页 ═══ -->
+    <section class="tab-content" id="tab-batch">
+        <section class="batch-hero">
+            <h1 class="hero-title">批量歌单数据导出</h1>
+            <p class="hero-subtitle">粘贴歌单或导入 Excel / Word 文件，一键获取每首歌在 QQ音乐 · 酷狗 · 酷我 · 网易云 · 汽水音乐 的收藏量 / 在听 / 评论 / 发行公司，并导出表格</p>
+        </section>
+
+        <div class="search-card glass">
+            <div class="input-head">
+                <label class="field-label">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    歌单输入（每行一首）
+                </label>
+                <button class="link-btn" id="loadDemoBtn" type="button">填入示例</button>
+            </div>
+            <p class="input-hint">
+                格式：<code>歌名,表演者,词曲作者</code>（词曲作者可省略；也支持用<code>逗号 / 制表符 / 空格</code>分隔）。例如：<br>
+                <code>因为有你,张蔷</code> &nbsp;·&nbsp; <code>秋天的玫瑰,张蔷, fark</code> &nbsp;·&nbsp; <code>晴天 周杰伦 方文山 周杰伦</code>
+            </p>
+
+            <!-- 文件上传区 -->
+            <div class="upload-zone" id="uploadZone">
+                <input type="file" id="fileInput" accept=".xlsx,.xlsm,.docx,.doc,.xls" hidden>
+                <div class="upload-inner" id="uploadInner">
+                    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <div class="upload-text">拖拽 Excel / Word 文件到此处，或 <span class="up-link">点击选择文件</span></div>
+                    <div class="upload-sub">支持 .xlsx / .xlsm / .docx · 自动识别「歌名 / 表演者 / 词曲作者」列</div>
+                </div>
+                <div class="upload-meta" id="uploadMeta" hidden>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    <span class="up-file" id="upFileName"></span>
+                    <span class="up-count" id="upCount"></span>
+                    <button class="up-clear" id="upClear" type="button">移除</button>
+                </div>
+            </div>
+
+            <textarea id="songInput" class="song-input" placeholder="因为有你,张蔷&#10;秋天的玫瑰,张蔷&#10;空白,张蔷&#10;潇洒地走,张蔷"></textarea>
+
+            <div class="input-foot">
+                <div class="parse-info">
+                    已识别 <span id="songCount" class="count-badge">0</span> 首
+                </div>
+                <div class="batch-actions">
+                    <label class="concurrency-label">并发
+                        <select id="concurrency" class="mini-select">
+                            <option value="3">3</option>
+                            <option value="6" selected>6</option>
+                            <option value="10">10</option>
+                        </select>
+                    </label>
+                    <button class="search-btn" id="runBtn">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 3l14 9-14 9V3z"/>
+                        </svg>
+                        <span>开始查询</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-wrap" id="progressWrap" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-text"><span id="progressText">查询中…</span><button id="syncCancelBtn" class="link-btn" type="button" style="margin-left:10px;color:#ef4444">✕ 取消</button></div>
+        </div>
+
+        <!-- 批量任务 v2 仪表盘（实时追踪） -->
+        <div class="v2-dashboard" id="v2Dashboard" hidden>
+            <style>
+                .v2-dashboard{margin-top:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:20px;backdrop-filter:blur(18px);}
+                :root[data-theme="light"] .v2-dashboard{background:rgba(255,255,255,.7);border-color:rgba(15,23,42,.08);}
+                .v2-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+                .v2-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+                .v2-badge{background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;}
+                .v2-name{font-weight:700;font-size:15px;}
+                .v2-id{opacity:.5;font-size:12px;font-family:ui-monospace,Menlo,monospace;}
+                .v2-actions .link-btn{background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;text-decoration:underline;}
+                .v2-progress{margin:14px 0 6px;}
+                .v2-bar{height:10px;border-radius:999px;background:rgba(120,120,140,.18);overflow:hidden;}
+                .v2-bar-fill{height:100%;width:0;background:linear-gradient(90deg,#6366f1,#8b5cf6);transition:width .6s ease;border-radius:999px;}
+                .v2-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:12px;}
+                .v2-stat{display:flex;flex-direction:column;align-items:center;gap:2px;background:rgba(120,120,140,.07);border-radius:12px;padding:8px 4px;}
+                .v2-stat-num{font-size:18px;font-weight:800;}
+                .v2-stat-lbl{font-size:11px;opacity:.6;}
+                /* 「已识别」作为最重要的高亮块，大字深底色，让用户一眼看到自己 2283 首歌
+                   现在跑到第几首。这才是 v2 dashboard 该有的视觉中心。 */
+                .v2-stat.big{background:linear-gradient(135deg,rgba(99,102,241,.18),rgba(139,92,246,.18));border:1px solid rgba(99,102,241,.3);}
+                .v2-stat.big .v2-stat-num{font-size:26px;color:#6366f1;font-variant-numeric:tabular-nums;}
+                .v2-stat.big .v2-stat-lbl{font-size:11px;opacity:.8;color:#6366f1;font-weight:600;}
+                :root[data-theme="light"] .v2-stat.big{background:linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.1));}
+                /* 下一首区域：让用户实时看到 worker 准备查什么歌，比 6 格统计更直观 */
+                .v2-nowline{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 14px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:12px;font-size:13px;}
+                .v2-nowline-icon{font-size:16px;}
+                .v2-nowline-lbl{opacity:.65;font-weight:600;}
+                .v2-nowline-song{font-weight:600;color:#6366f1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+                .v2-nowline-count{opacity:.5;font-size:12px;font-variant-numeric:tabular-nums;}
+                .v2-nowline.done{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);}
+                .v2-nowline.done .v2-nowline-lbl::before{content:'✅ ';opacity:1;}
+                .v2-nowline.done .v2-nowline-song{color:#16a34a;}
+                .v2-status-line{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;}
+                .v2-status-dot{width:9px;height:9px;border-radius:50%;background:#94a3b8;}
+                .v2-status-dot.running{background:#22c55e;box-shadow:0 0 8px #22c55e;}
+                .v2-status-dot.pending{background:#f59e0b;}
+                .v2-status-dot.completed{background:#6366f1;}
+                .v2-status-dot.cancelled{background:#94a3b8;}
+                .v2-status-dot.failed{background:#ef4444;}
+                .v2-coverage{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+                .v2-cov-card{border:1px solid rgba(120,120,140,.18);border-radius:14px;padding:12px;background:rgba(120,120,140,.05);}
+                .v2-cov-card h4{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px;}
+                .v2-cov-bar{height:6px;border-radius:999px;background:rgba(120,120,140,.2);overflow:hidden;margin:6px 0;}
+                .v2-cov-bar i{display:block;height:100%;background:#22c55e;transition:width .6s ease;}
+                .v2-cov-row{display:flex;justify-content:space-between;font-size:12px;margin:3px 0;}
+                .v2-cov-row b{font-weight:700;}
+                .v2-cov-row.warn{color:#d97706;font-weight:600;}
+                .v2-cov-row.warn span:last-child{font-variant-numeric:tabular-nums;}
+                .v2-finalize-note{margin-top:10px;font-size:12px;padding:8px 12px;border-radius:10px;background:rgba(16,185,129,.1);color:#059669;border:1px solid rgba(16,185,129,.22);}
+                .v2-finalize-note.running{background:rgba(249,115,22,.1);color:#c2410c;border-color:rgba(249,115,22,.25);}
+                .v2-throttle{margin-top:12px;font-size:12px;padding:8px 12px;border-radius:10px;background:rgba(34,197,94,.1);color:#16a34a;border:1px solid rgba(34,197,94,.2);}
+                :root[data-theme="light"] .v2-throttle{color:#15803d;}
+                .v2-throttle.on{background:rgba(239,68,68,.12);color:#dc2626;border-color:rgba(239,68,68,.25);}
+                .v2-recent{margin-top:16px;}
+                .v2-recent h4{font-size:13px;margin:0 0 8px;opacity:.8;}
+                .v2-recent-table{width:100%;border-collapse:collapse;font-size:12px;}
+                .v2-recent-table th{text-align:left;opacity:.55;font-weight:600;padding:6px 8px;border-bottom:1px solid rgba(120,120,140,.15);}
+                .v2-recent-table td{padding:6px 8px;border-bottom:1px solid rgba(120,120,140,.08);}
+                .v2-recent-table .rf{font-family:ui-monospace,Menlo,monospace;font-weight:700;color:#22c55e;}
+                .v2-recent-table .rf.zero{color:rgba(150,150,160,.6);font-weight:500;}
+                .v2-recent-table .rf.none{color:rgba(150,150,160,.4);}
+                .v2-recent-table .v2-recent-time{text-align:right;white-space:nowrap;opacity:.6;font-variant-numeric:tabular-nums;}
+                .v2-recent-empty{font-size:12px;opacity:.5;padding:8px 0;}
+                /* 大表格底部提示：超过 N 行时引导用户去 Excel 看全量 */
+                .v2-recent-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;opacity:.75;}
+                .v2-recent-foot .link-btn{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;text-decoration:none;}
+                .v2-recent-table .idx{font-family:ui-monospace,Menlo,monospace;opacity:.55;font-variant-numeric:tabular-nums;text-align:right;}
+                .v2-recent-table .match{display:inline-block;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.3px;}
+                .v2-recent-table .match.good{background:rgba(34,197,94,.15);color:#16a34a;}
+                .v2-recent-table .match.maybe{background:rgba(245,158,11,.15);color:#d97706;}
+                .v2-recent-table .match.bad{background:rgba(239,68,68,.15);color:#dc2626;}
+                .v2-recent-table .match.none{background:rgba(120,120,140,.12);color:rgba(150,150,160,.6);}
+                .v2-errors{margin-top:14px;border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:10px 12px;background:rgba(239,68,68,.05);}
+                .v2-errors-head{font-size:12px;font-weight:600;color:#ef4444;margin-bottom:6px;}
+                .v2-err-row{display:grid;grid-template-columns:40px 1fr auto;gap:8px;font-size:12px;border-bottom:1px dashed rgba(239,68,68,.08);align-items:center;padding:3px 0;}
+                .v2-err-row:last-child{border-bottom:none;}
+                .v2-err-idx{color:#ef4444;font-weight:600;font-family:ui-monospace,Menlo,monospace;}
+                .v2-err-song{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+                .v2-err-msg{opacity:.6;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+                .v2-foot{margin-top:16px;display:flex;justify-content:flex-end;}
+                .download-btn{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
+                .download-btn:disabled{opacity:.5;cursor:not-allowed;}
+                @media (max-width:900px){.v2-stats{grid-template-columns:repeat(3,1fr);}.v2-coverage{grid-template-columns:1fr;}.v2-err-row{grid-template-columns:40px 1fr;}.v2-err-msg{display:none;}}
+            </style>
+            <div class="v2-head">
+                <div class="v2-title">
+                    <span class="v2-badge">v2 批量任务</span>
+                    <span id="v2TaskName" class="v2-name">—</span>
+                    <span class="v2-id">#<span id="v2TaskId">?</span></span>
+                </div>
+            <div class="v2-actions">
+                <button class="link-btn" id="v2CancelBtn" type="button">取消任务</button>
+                <button class="link-btn" id="v2RetryEmptyBtn" type="button" title="把上次没搜到的歌重新跑一次">🔁 重试未收录</button>
+            </div>
+            </div>
+            <div class="v2-progress">
+                <div class="v2-bar"><div class="v2-bar-fill" id="v2BarFill"></div></div>
+                <div class="v2-stats">
+                    <div class="v2-stat big"><span class="v2-stat-num" id="v2Done">0</span><span class="v2-stat-lbl">已识别</span></div>
+                    <div class="v2-stat"><span class="v2-stat-num" id="v2Failed">0</span><span class="v2-stat-lbl">失败</span></div>
+                    <div class="v2-stat"><span class="v2-stat-num" id="v2Total">0</span><span class="v2-stat-lbl">总数</span></div>
+                    <div class="v2-stat"><span class="v2-stat-num" id="v2Pct">0%</span><span class="v2-stat-lbl">进度</span></div>
+                    <div class="v2-stat"><span class="v2-stat-num" id="v2Speed">—</span><span class="v2-stat-lbl">首/分钟</span></div>
+                    <div class="v2-stat"><span class="v2-stat-num" id="v2Eta">—</span><span class="v2-stat-lbl">预计剩余</span></div>
+                </div>
+            </div>
+            <div class="v2-nowline" id="v2Nowline">
+                <span class="v2-nowline-icon">📍</span>
+                <span class="v2-nowline-lbl">下一首：</span>
+                <span class="v2-nowline-song" id="v2NextSong">—</span>
+                <span class="v2-nowline-count" id="v2OngoingCount"></span>
+            </div>
+            <div class="v2-status-line">
+                <span class="v2-status-dot" id="v2StatusDot"></span>
+                <span id="v2StatusText">等待开始…</span>
+            </div>
+            <div class="v2-finalize-note" id="v2FinalizeNote" hidden></div>
+            <!-- 三平台实收率（最该看的：能暴露被限流漏数） -->
+            <div class="v2-coverage" id="v2Coverage">
+                <div class="v2-cov-card" data-p="qq"><h4>🎵 QQ音乐</h4><div class="v2-cov-bar"><i id="cov_qq_bar"></i></div>
+                    <div class="v2-cov-row"><span>收藏量</span><b><span id="cov_qq_fav">0</span>/<span id="cov_qq_tot">0</span></b></div>
+                    <div class="v2-cov-row"><span>链接</span><span id="cov_qq_url">0</span></div>
+                    <div class="v2-cov-row"><span>待确认</span><span id="cov_qq_pending">0</span></div>
+                    <div class="v2-cov-row warn"><span>未收录(留空)</span><span id="cov_qq_favnull">0</span></div>
+                </div>
+                <div class="v2-cov-card" data-p="kugou"><h4>🐶 酷狗</h4><div class="v2-cov-bar"><i id="cov_kugou_bar"></i></div>
+                    <div class="v2-cov-row"><span>收藏量</span><b><span id="cov_kugou_fav">0</span>/<span id="cov_kugou_tot">0</span></b></div>
+                    <div class="v2-cov-row"><span>链接</span><span id="cov_kugou_url">0</span></div>
+                    <div class="v2-cov-row"><span>待确认</span><span id="cov_kugou_pending">0</span></div>
+                    <div class="v2-cov-row warn"><span>未收录(留空)</span><span id="cov_kugou_favnull">0</span></div>
+                </div>
+                <div class="v2-cov-card" data-p="netease"><h4>☁️ 网易云</h4><div class="v2-cov-bar"><i id="cov_netease_bar"></i></div>
+                    <div class="v2-cov-row"><span>收藏量</span><b><span id="cov_netease_fav">0</span>/<span id="cov_netease_tot">0</span></b></div>
+                    <div class="v2-cov-row"><span>链接</span><span id="cov_netease_url">0</span></div>
+                    <div class="v2-cov-row"><span>待确认</span><span id="cov_netease_pending">0</span></div>
+                    <div class="v2-cov-row warn"><span>未收录(留空)</span><span id="cov_netease_favnull">0</span></div>
+                </div>
+            </div>
+            <div class="v2-throttle" id="v2Throttle">限速状态：正常</div>
+            <!-- 已识别的歌（实时追加每一条，前台能直接看到 2283 首歌的数据） -->
+            <div class="v2-recent">
+                <h4>📊 已识别的歌（<span id="v2RecentCount">0</span> 首 · 实时追加）</h4>
+                <div class="table-scroll" id="v2RecentScroll" style="max-height:480px;overflow:auto;">
+                    <table class="v2-recent-table">
+                        <thead><tr><th style="width:50px">#</th><th>歌名</th><th>歌手</th><th>QQ收藏</th><th>酷狗收藏</th><th>网易云收藏</th><th>匹配</th></tr></thead>
+                        <tbody id="v2RecentBody"><tr><td colspan="7" class="v2-recent-empty">还没有结果 — worker 一首歌搞定后会自动追加到这里</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="v2-recent-foot" id="v2RecentFoot" hidden>
+                    <span id="v2RecentFootText">仅显示最近 100 首，导出 Excel 看全部</span>
+                    <button class="link-btn" id="v2ExportBtn2" type="button">📥 下载 Excel</button>
+                </div>
+            </div>
+            <div class="v2-errors" id="v2Errors" hidden>
+                <div class="v2-errors-head">最近失败（最多 30 条）</div>
+                <div class="v2-errors-body" id="v2ErrorsBody"></div>
+            </div>
+            <div class="v2-foot">
+                <button class="download-btn" id="v2ExportBtn" disabled>下载 Excel（可中途导出已完成的）</button>
+            </div>
+        </div>
+
+        <div class="result-section" id="resultSection" hidden>
+            <div class="result-head">
+                <h2 class="result-title">查询结果</h2>
+                <button class="download-btn" id="downloadBtn">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    下载 Excel
+                </button>
+            </div>
+            <div class="table-scroll">
+                <table class="results-table" id="resultTable">
+                    <thead id="resultHead"></thead>
+                    <tbody id="resultBody"></tbody>
+                </table>
+            </div>
+            <p class="result-note">
+                匹配口径：以歌名匹配为核心，表演者命中时优先取该版本（标注「精准匹配(目标艺人)」）；同歌名多版本取收藏量最高。发行公司优先取选中版本厂牌，缺失时回退「目标艺人版本优先」逻辑。
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══ 红心管理标签页（识别各平台「我喜欢 / 收藏」的歌）═══ -->
+    <section class="tab-content" id="tab-hearts">
+        <div class="hero">
+            <h1 class="hero-title">红心管理</h1>
+            <p class="hero-subtitle">登录各平台账号并抓取「我喜欢 / 收藏」歌单，搜索结果中自动打上对应平台红心徽章</p>
+        </div>
+
+        <div class="login-methods-note glass">
+            <span class="lm-tag">红心 Cookie 独立存储</span> 与「Cookie 设置」里的搜索登录态<strong>彼此分开</strong>，可分别配置不同账号。
+            <span class="lm-sep">·</span>
+            <span class="lm-tag">推荐顺序</span> 浏览器登录自动抓取 → 粘贴公开歌单链接 → 手动粘贴 Cookie → 手动粘贴歌单。
+        </div>
+
+        <div class="hearts-list" id="heartsList">
+            <!-- 五大平台红心卡片由 JS 动态生成 -->
+        </div>
+
+        <div class="settings-help glass">
+            <h3 class="settings-help-title">如何获取登录 Cookie？</h3>
+            <ol class="settings-help-steps">
+                <li>用浏览器打开对应平台网页版（QQ：<code>y.qq.com</code> · 网易云：<code>music.163.com</code> · 酷狗：<code>kugou.com</code> · 酷我：<code>kuwo.cn</code> · 汽水：<code>douyin.com</code>）</li>
+                <li>登录你的账号</li>
+                <li>按 <kbd>F12</kbd> 打开开发者工具，切到 <strong>Network</strong></li>
+                <li>刷新页面，点任意请求，在 <strong>Headers</strong> 里复制 <code>Cookie</code> 整行值</li>
+                <li>粘贴到上方对应平台卡片，点「保存 Cookie」后再「登录并抓取红心」</li>
+            </ol>
+            <div class="settings-help-note">
+                <strong>说明：</strong>QQ 音乐、网易云、酷我支持浏览器登录自动抓取 Cookie；酷狗可用「浏览器登录」或手动粘贴 Cookie；汽水因抖音接口签名保护，请用下方「歌单链接」方式导入。
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ 标记歌曲标签页 ═══ -->
+    <section class="tab-content" id="tab-marks">
+        <div class="hero">
+            <h1 class="hero-title">已标记歌曲</h1>
+            <p class="hero-subtitle" id="marksSubtitle">汇总你在各平台手动标记过的歌曲（标记已通过云端全网同步）</p>
+        </div>
+        <div class="marks-toolbar">
+            <div class="marks-scope-switch" role="tablist" aria-label="标记视图切换">
+                <button type="button" class="marks-scope-btn" id="marksScopeMine" data-scope="mine">
+                    <span class="marks-scope-icon">📌</span>
+                    <span>仅看我</span>
+                </button>
+                <button type="button" class="marks-scope-btn active" id="marksScopeAll" data-scope="shared" title="所有账号的标记（默认全员可见；被授权可改/删他人标）">
+                    <span class="marks-scope-icon">🌐</span>
+                    <span>共享</span>
+                </button>
+            </div>
+            <span class="marks-count" id="marksCount">共 0 首</span>
+            <button class="search-btn sm" id="marksRefreshBtn" type="button">刷新</button>
+            <button class="mark-io-btn" id="marksExportBtn" type="button">导出标记</button>
+            <button class="mark-io-btn ghost" id="marksSummaryBtn" type="button" title="按标签分类查看分布">📊 标签汇总</button>
+        </div>
+        <!-- 标签筛选条：按主标签筛，多选芯片切换；点击空白区复位为「全部」 -->
+        <div class="marks-filter-bar" id="marksFilterBar">
+            <div class="marks-filter-label">筛选：</div>
+            <button type="button" class="marks-filter-chip active" data-filter="__all__">全部 <span class="chip-count" data-count-key="all">0</span></button>
+            <button type="button" class="marks-filter-chip" data-filter="__unmarked__">未标记 <span class="chip-count" data-count-key="unmarked">0</span></button>
+            <span class="marks-filter-divider"></span>
+            <!-- 动态渲染 8 类主标签 chip + 正版@/盗版@ + 自定义 -->
+            <span id="marksFilterChips"></span>
+            <span class="marks-filter-divider"></span>
+            <button type="button" class="marks-filter-chip ghost" id="marksClearFilter" title="清除筛选">✕ 清除筛选</button>
+        </div>
+        <!-- 批量操作条：选中任意行才显示；sticky 在筛选条下方 -->
+        <div class="marks-batch-bar" id="marksBatchBar" style="display:none">
+            <label class="marks-batch-all">
+                <input type="checkbox" id="marksSelectAll"> 全选
+            </label>
+            <span class="marks-batch-count" id="marksBatchCount">已选 0 条</span>
+            <button type="button" class="search-btn sm primary" id="marksBatchEditBtn" title="把选中行的标签改为同一值">✏️ 改标签</button>
+            <button type="button" class="search-btn sm primary" id="marksBatchAppendBtn" title="把附加标签追加到选中行（不动主标签）">➕ 加附加标签</button>
+            <button type="button" class="search-btn sm warn" id="marksBatchClearBtn" title="清空选中行的主标签 / 附加标签 / 备注">⌫ 清空标签</button>
+            <button type="button" class="search-btn sm danger" id="marksBatchDelBtn" title="删除选中行的标记">🗑 删除</button>
+            <button type="button" class="search-btn sm ghost" id="marksBatchCancelBtn">取消</button>
+        </div>
+        <!-- 标签汇总卡片（默认隐藏，点 📊 标签汇总 切换） -->
+        <div class="marks-summary" id="marksSummary" style="display:none">
+            <div class="marks-summary-head">
+                <span class="marks-summary-title">📊 标签分布</span>
+                <span class="marks-summary-meta" id="marksSummaryMeta"></span>
+                <button type="button" class="marks-filter-chip ghost" id="marksSummaryClose" title="关闭汇总">✕ 关闭</button>
+            </div>
+            <div class="marks-summary-grid" id="marksSummaryGrid"></div>
+        </div>
+        <div class="marks-status" id="marksStatus" data-kind=""></div>
+        <div class="table-wrap glass">
+            <table class="results-table" id="marksTable">
+                <thead id="marksTableHead">
+                    <tr>
+                        <th>歌曲名</th>
+                        <th>歌手</th>
+                        <th>专辑</th>
+                        <th>标记类型</th>
+                        <th>备注</th>
+                        <th>更新时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="marksBody"></tbody>
+            </table>
+        </div>
+        <div class="empty-state" id="marksEmpty" style="display:none">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+            <p>还没有标记任何歌曲</p>
+            <span>在「音乐搜索」页搜歌后，点结果里的标记按钮即可</span>
+        </div>
+    </section>
+
+    <!-- ═══ 我的歌单标签页（原版 / 翻唱版）═══ -->
+    <section class="tab-content" id="tab-playlist">
+        <div class="hero">
+            <h1 class="hero-title">我的歌单（原版 / 翻唱版）</h1>
+            <p class="hero-subtitle">导入本设备专属歌单，自动搜出每首歌的原版与各平台翻唱/版本数据；原版带专属标签，打开即展示、不重复搜索</p>
+        </div>
+
+        <div class="search-card glass">
+            <div class="input-head">
+                <label class="field-label">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    歌单输入（每行一首）
+                </label>
+                <button class="link-btn" id="plLoadDemoBtn" type="button">填入示例</button>
+            </div>
+            <p class="input-hint">
+                格式：<code>歌名,表演者,词作者,曲作者</code>（词/曲作者可省略）。例如：<br>
+                <code>晴天,周杰伦,方文山,周杰伦</code> &nbsp;·&nbsp; <code>稻香,周杰伦</code>。<br>
+                带词曲作者时会<b>精准匹配</b>——填了的作者必须能在结果里找到对应人，才算原版，否则归入"词曲不一致"。支持拖入 .xlsx / .docx 自动识别列。
+            </p>
+
+            <div class="upload-zone" id="plUploadZone">
+                <input type="file" id="plFileInput" accept=".xlsx,.xlsm,.docx,.doc" hidden>
+                <div class="upload-inner" id="plUploadInner">
+                    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <div class="upload-text">拖拽 Excel / Word 文件到此处，或 <span class="up-link">点击选择文件</span></div>
+                    <div class="upload-sub">支持 .xlsx / .xlsm / .docx · 自动识别「歌名 / 表演者 / 词曲作者」列</div>
+                </div>
+            </div>
+
+            <textarea id="plSongInput" class="song-input" placeholder="晴天,周杰伦&#10;稻香,周杰伦"></textarea>
+
+            <div class="input-foot">
+                <div class="parse-info">
+                    已识别 <span id="plCount" class="count-badge">0</span> 首
+                </div>
+                <div class="batch-actions">
+                    <button class="search-btn" id="plImportBtn">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 3l14 9-14 9V3z"/>
+                        </svg>
+                        <span>导入并查询</span>
+                    </button>
+                    <button class="mark-io-btn" id="plResearchBtn" type="button" style="display:none">重新查询</button>
+                    <button class="mark-io-btn danger" id="plClearBtn" type="button" style="display:none">清除本机歌单</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-wrap" id="plProgressWrap" hidden>
+            <div class="progress-bar"><div class="progress-fill" id="plProgressFill"></div></div>
+            <div class="progress-text" id="plProgressText">查询中…</div>
+        </div>
+
+        <div class="playlist-result" id="plResultSection" hidden>
+            <div class="result-head">
+                <h2 class="result-title">歌单数据（<span id="plResultCount">0</span> 首）</h2>
+                <span class="result-searched" id="plSearchedAt"></span>
+                <button class="mark-io-btn" id="plDownloadBtn" type="button" style="margin-left:auto">下载 Excel</button>
+            </div>
+            <div class="pl-filter-row" id="plFilterRow" hidden>
+                <div class="pl-filter-input-wrap">
+                    <svg class="pl-filter-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="search" id="plFilterInput" placeholder="过滤歌曲 — 歌名 / 歌手 / 词 / 曲 任一字段命中即显示" autocomplete="off" />
+                    <button type="button" class="pl-filter-clear" id="plFilterClear" title="清空过滤（Esc）" aria-label="清空过滤">×</button>
+                </div>
+                <span class="pl-filter-count" id="plFilterCount"></span>
+            </div>
+            <div class="pl-batch-row" id="plBatchRow" hidden>
+                <span class="pl-batch-tip">批量操作：</span>
+                <button type="button" class="mark-io-btn" id="plBatchSelectAll">全选当前过滤</button>
+                <button type="button" class="mark-io-btn" id="plBatchUnselect">取消全选</button>
+                <span class="pl-batch-sep">|</span>
+                <button type="button" class="mark-io-btn pl-batch-pos" id="plBatchMarkPos" disabled>已选标为正版</button>
+                <button type="button" class="mark-io-btn pl-batch-pir" id="plBatchMarkPir" disabled>已选标为盗版</button>
+                <span class="pl-batch-sep">|</span>
+                <span class="pl-batch-tip">按状态批量：</span>
+                <button type="button" class="mark-io-btn pl-batch-pos" data-status-filter="精准匹配">所有「精准匹配」标正版</button>
+                <button type="button" class="mark-io-btn pl-batch-pir" data-status-filter="非原版">所有「非原版」标盗版</button>
+            </div>
+            <div class="pl-pin-row" id="plPinRow" hidden>
+                <span class="pl-pin-count" id="plPinCount">📌 固定清单 0</span>
+                <button type="button" class="mark-io-btn" id="plOnlyPinnedBtn">仅看固定</button>
+                <button type="button" class="mark-io-btn primary" id="plRefreshPinBtn">🔄 刷新固定数据</button>
+                <button type="button" class="mark-io-btn" id="plRecycleBtn">🗑 回收站 (0)</button>
+                <span class="pl-pin-tip">固定后，以后点「刷新固定数据」即可直接拉这批歌的最新收藏/在听/评论（不重搜、不抓错版本）</span>
+            </div>
+            <div id="plCards"></div>
+            <div class="pl-batch-bar" id="plBatchBar" hidden>
+                <span class="pl-batch-count" id="plBatchCount">已选 0 个版本</span>
+                <button type="button" class="mark-io-btn" id="plBatchSelectAll">全选当前可见</button>
+                <button type="button" class="mark-io-btn" id="plBatchClear">清空选择</button>
+                <button type="button" class="mark-io-btn primary" id="plBatchDelete">批量删除（可恢复）</button>
+                <span class="pl-batch-tip">勾选版本行前面的 ☐ 即可加入批量；批量删除（可恢复）= 把版本加入删除黑名单，可从回收站恢复</span>
+            </div>
+            <div class="empty-state" id="plEmpty" style="display:none">
+                <p>本机歌单暂无查询结果</p>
+                <span>点上方「导入并查询」或「重新查询」</span>
+            </div>
+        </div>
+    </section>
+
+    {% include 'monitor.html' %}
+{% include 'evidence.html' %}
+
+</main>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 歌曲标记弹窗：置于所有标签页之外，音乐搜索页 / 歌词识别页均可弹出 -->
+<div id="markPopover" class="mark-popover" style="display:none">
+        <div class="mark-pop-title" id="markPopTitle"></div>
+        <div class="mark-pop-sub" id="markPopSub"></div>
+        <div class="mark-pop-types" id="markPopTypes">
+            <div class="mark-pop-section-label">主标签（单选）</div>
+            <div class="mark-pop-chips">
+                <button type="button" class="mark-type-chip mark-piracy" data-type="已打盗版">已打盗版</button>
+                <button type="button" class="mark-type-chip mark-piracy" data-type="未打盗版">未打盗版</button>
+                <button type="button" class="mark-type-chip mark-piracy" data-type="疑似盗版">疑似盗版</button>
+                <button type="button" class="mark-type-chip" data-type="正版确认">正版确认</button>
+                <button type="button" class="mark-type-chip" data-type="已确认">已确认</button>
+                <button type="button" class="mark-type-chip" data-type="待核实">待核实</button>
+                <button type="button" class="mark-type-chip" data-type="我的精选">我的精选</button>
+                <button type="button" class="mark-type-chip" data-type="已排除">已排除</button>
+                <button type="button" class="mark-type-chip mark-unrelated" data-type="无关歌曲">无关歌曲</button>
+            </div>
+        </div>
+        <div class="mark-pop-types" id="markPopTags">
+            <div class="mark-pop-section-label">附加标签（多选）</div>
+            <div class="mark-pop-chips">
+                <button type="button" class="mark-tag-chip" data-type="已打盗版">已打盗版</button>
+                <button type="button" class="mark-tag-chip" data-type="未打盗版">未打盗版</button>
+                <button type="button" class="mark-tag-chip" data-type="疑似盗版">疑似盗版</button>
+                <button type="button" class="mark-tag-chip" data-type="正版确认">正版确认</button>
+                <button type="button" class="mark-tag-chip" data-type="已确认">已确认</button>
+                <button type="button" class="mark-tag-chip" data-type="待核实">待核实</button>
+                <button type="button" class="mark-tag-chip" data-type="我的精选">我的精选</button>
+                <button type="button" class="mark-tag-chip" data-type="已排除">已排除</button>
+                <button type="button" class="mark-tag-chip mark-unrelated" data-type="无关歌曲">无关歌曲</button>
+            </div>
+        </div>
+        <textarea id="markPopNote" class="mark-pop-note" placeholder="备注（可选），例如：已联系版权方 / 待法务确认"></textarea>
+        <div class="mark-pop-actions">
+            <button type="button" id="markPopSave" class="btn-primary">保存标记</button>
+            <button type="button" id="markPopDelete" class="btn-danger">删除标记</button>
+            <button type="button" id="markPopCancel" class="btn-ghost">取消</button>
+        </div>
+    </div>
+
+<script src="{{ url_for('static', filename='js/app.js', v='20260824d') }}"></script>
+<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260820c"></script>
+<script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>
+<script src="{{ url_for('static', filename='js/playlist.js', v='20260811p') }}"></script>
+<script src="{{ url_for('static', filename='js/monitor.js', v='20260815d') }}"></script>
+<script src="{{ url_for('static', filename='js/evidence.js', v='20260812a') }}"></script>
+
+<!-- ════════ 多用户登录 / 注册（v4.7） ════════ -->
+<div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+        <div class="auth-logo">💎 MusicFinder</div>
+        <h2 class="auth-title" id="authTitle">登录</h2>
+        <div class="auth-tabs">
+            <button type="button" id="authTabLogin" class="active">登录</button>
+            <button type="button" id="authTabReg">注册新账号</button>
+        </div>
+        <input id="authUser" class="auth-input" placeholder="用户名" autocomplete="username" />
+        <input id="authPass" class="auth-input" type="password" placeholder="密码（至少 4 位）" autocomplete="current-password" />
+        <input id="authInvite" class="auth-input auth-invite" placeholder="邀请码（向管理员获取）" autocomplete="off" hidden />
+        <div class="auth-msg" id="authMsg"></div>
+        <button class="auth-submit" id="authSubmit">登录</button>
+        <p class="auth-hint" id="authHint">首次使用请先「注册新账号」；首个账号会自动继承本机原有数据（标记/歌单/红心/登录态）。</p>
+    </div>
+</div>
+
+<div class="recycle-overlay" id="recycleOverlay" hidden>
+    <div class="recycle-card">
+        <div class="recycle-head">
+            <h2 class="recycle-title">🗑 回收站</h2>
+            <button type="button" class="recycle-close" id="recycleClose" aria-label="关闭">×</button>
+        </div>
+        <p class="recycle-sub">误删的版本 / 整首歌可在此一键恢复（按删除时间倒序）。</p>
+        <div class="recycle-list" id="recycleList"></div>
+        <div class="recycle-empty" id="recycleEmpty" style="display:none">回收站是空的，没有可恢复的删除。</div>
+    </div>
+</div>
+
+<div class="yy-watermark" aria-hidden="true">by：yy</div>
+
+<style>
+/* ── 搜索进度提示（v4.27.8）── */
+.search-progress{display:flex;align-items:center;gap:14px;margin:14px 0 4px;padding:14px 18px;
+  border-radius:14px;background:linear-gradient(135deg,rgba(99,102,241,.10),rgba(139,92,246,.10));
+  border:1px solid rgba(99,102,241,.28);}
+.search-progress[hidden]{display:none;}
+.sp-spinner{width:22px;height:22px;border-radius:50%;border:3px solid rgba(99,102,241,.25);
+  border-top-color:#6366f1;animation:sp-spin .8s linear infinite;flex-shrink:0;}
+@keyframes sp-spin{to{transform:rotate(360deg);}}
+.sp-text{flex:1;min-width:0;}
+.sp-title{font-size:14px;font-weight:600;color:var(--text-primary,#0F172A);}
+.sp-sub{font-size:12px;opacity:.7;margin-top:2px;}
+.sp-timer{font-size:13px;font-weight:700;color:#6366f1;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.sp-cancel{padding:7px 14px;border-radius:10px;border:1px solid rgba(127,127,127,.3);
+  background:rgba(127,127,127,.08);color:inherit;cursor:pointer;font-size:13px;transition:.2s;white-space:nowrap;}
+.sp-cancel:hover{background:rgba(127,127,127,.18);}
+
+.auth-overlay{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,12,20,.72);backdrop-filter:blur(8px);}
+.auth-card{width:340px;max-width:90vw;padding:28px 26px;border-radius:18px;
+  background:var(--bg-elevated, #fff);color:var(--text-primary, #0F172A);
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  border:1px solid var(--glass-border, rgba(127,127,127,.18));}
+.auth-logo{font-size:20px;font-weight:700;margin-bottom:6px;}
+.auth-title{font-size:17px;margin:0 0 14px;font-weight:600;}
+.auth-tabs{display:flex;gap:8px;margin-bottom:14px;}
+.auth-tabs button{flex:1;padding:8px 0;border:1px solid rgba(127,127,127,.25);border-radius:10px;
+  background:transparent;color:inherit;cursor:pointer;font-size:13px;transition:.2s;}
+.auth-tabs button.active{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-color:transparent;}
+.auth-input{width:100%;box-sizing:border-box;padding:11px 12px;margin-bottom:10px;border-radius:10px;
+  border:1px solid rgba(127,127,127,.28);background:rgba(127,127,127,.06);color:inherit;font-size:14px;}
+.auth-input:focus{outline:none;border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.18);}
+.auth-msg{min-height:18px;font-size:12.5px;margin-bottom:8px;color:#ef4444;}
+.auth-msg.ok{color:#22c55e;}
+.auth-submit{width:100%;padding:11px 0;border:none;border-radius:11px;cursor:pointer;font-size:14px;font-weight:600;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;transition:.2s;}
+.auth-submit:hover{filter:brightness(1.07);}
+.auth-hint{font-size:11.5px;color:var(--text-muted,#888);margin:12px 0 0;line-height:1.5;}
+.auth-hint.auth-hint-admin{color:#ff8a00;font-weight:600;}
+.user-area{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.user-name{font-size:13px;font-weight:600;opacity:.85;}
+.btn-user-logout{padding:5px 10px;border:1px solid rgba(127,127,127,.3);border-radius:9px;
+  background:transparent;color:inherit;cursor:pointer;font-size:12px;}
+.btn-user-logout:hover{border-color:#8b5cf6;color:#8b5cf6;}
+.btn-user-admin{padding:5px 10px;border:1px solid rgba(139,92,246,.5);border-radius:9px;
+  background:rgba(139,92,246,.14);color:#a78bfa;cursor:pointer;font-size:12px;font-weight:600;transition:.15s;}
+.btn-user-admin:hover{background:rgba(139,92,246,.26);color:#c4b5fd;}
+
+/* ── v4.7 回收站 ── */
+.recycle-overlay{position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,12,20,.72);backdrop-filter:blur(8px);}
+.recycle-overlay[hidden]{display:none !important;}
+.recycle-card{width:470px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column;padding:22px 22px 14px;border-radius:18px;
+  background:var(--card-bg,#fff);box-shadow:0 20px 60px rgba(0,0,0,.35);border:1px solid rgba(127,127,127,.18);}
+.recycle-head{display:flex;align-items:center;justify-content:space-between;}
+.recycle-title{font-size:17px;margin:0;font-weight:600;}
+.recycle-close{border:none;background:transparent;color:inherit;font-size:22px;cursor:pointer;line-height:1;opacity:.6;padding:0 4px;}
+.recycle-close:hover{opacity:1;}
+.recycle-sub{font-size:12.5px;color:var(--text-muted,#888);margin:4px 0 14px;line-height:1.5;}
+.recycle-list{overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px;}
+.recycle-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;
+  border:1px solid rgba(127,127,127,.18);background:rgba(127,127,127,.05);}
+.recycle-item .ri-icon{font-size:18px;flex:none;}
+.recycle-item .ri-main{flex:1;min-width:0;}
+.recycle-item .ri-name{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.recycle-item .ri-meta{font-size:11.5px;color:var(--text-muted,#888);margin-top:2px;}
+.recycle-item .ri-restore{flex:none;padding:7px 14px;border:none;border-radius:9px;cursor:pointer;font-size:12.5px;font-weight:600;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;transition:.2s;}
+.recycle-item .ri-restore:hover{filter:brightness(1.07);}
+.recycle-item .ri-restore:disabled{opacity:.5;cursor:default;filter:none;}
+.recycle-empty{text-align:center;color:var(--text-muted,#888);font-size:13px;padding:26px 0;}
+
+/* ── 批量删除（可恢复）：版本行多选 + 底部 sticky 操作栏 ── */
+.pl-ver-check{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  cursor:pointer;padding:0 6px 0 0;}
+.pl-ver-check input{position:absolute;opacity:0;width:0;height:0;}
+.pl-ver-checkmark{width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(127,127,127,.5);
+  background:transparent;display:inline-block;position:relative;transition:.15s;}
+.pl-ver-check:hover .pl-ver-checkmark{border-color:#8b5cf6;}
+.pl-ver-check input:checked + .pl-ver-checkmark{background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  border-color:transparent;}
+.pl-ver-check input:checked + .pl-ver-checkmark::after{content:"";position:absolute;left:5px;top:1.5px;
+  width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);}
+.pl-version--selected{outline:2px solid #8b5cf6;outline-offset:-2px;border-radius:6px;
+  background:rgba(139,92,246,.06);}
+
+.pl-batch-bar{position:sticky;bottom:0;z-index:40;display:flex;align-items:center;gap:10px;
+  flex-wrap:wrap;padding:12px 16px;margin-top:14px;border-radius:14px;
+  background:var(--card-bg,#fff);box-shadow:0 -8px 30px rgba(0,0,0,.18);
+  border:1px solid rgba(139,92,246,.35);}
+.pl-batch-bar[hidden]{display:none !important;}
+.pl-batch-count{font-size:13px;font-weight:600;color:#8b5cf6;}
+.pl-batch-tip{font-size:11.5px;color:var(--text-muted,#888);margin-left:auto;}
+
+.yy-watermark{position:fixed;right:14px;bottom:10px;z-index:60;
+  font-size:11px;letter-spacing:.3px;line-height:1;
+  color:var(--text-muted,#8a8f98);opacity:.5;pointer-events:none;
+  user-select:none;font-family:inherit;}
+.yy-watermark::before{content:"";display:inline-block;width:5px;height:5px;
+  border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  margin-right:5px;vertical-align:middle;}
+</style>
+
+<script>
+(function(){
+  const overlay = document.getElementById('authOverlay');
+  const title = document.getElementById('authTitle');
+  const userEl = document.getElementById('authUser');
+  const passEl = document.getElementById('authPass');
+  const inviteEl = document.getElementById('authInvite');
+  const msgEl = document.getElementById('authMsg');
+  const submit = document.getElementById('authSubmit');
+  const tabLogin = document.getElementById('authTabLogin');
+  const tabReg = document.getElementById('authTabReg');
+  const hint = document.getElementById('authHint');
+  const userArea = document.getElementById('userArea');
+  const userName = document.getElementById('userName');
+  const adminBtn = document.getElementById('adminBtn');
+  const restartSvcBtn = document.getElementById('restartSvcBtn');
+  const logoutBtn = document.getElementById('userLogoutBtn');
+  let mode = 'login';
+
+  // 注册模式下，若用户名是管理员则免邀请码（与后端 app.py:636 豁免一致）
+  function syncInviteVisibility(){
+    const isAdminName = (mode === 'reg') && (userEl.value.trim() === '杨颖大王');
+    inviteEl.hidden = (mode !== 'reg') || isAdminName;
+    if (isAdminName){
+      hint.textContent = '「杨颖大王」是管理员账号，注册免邀请码，填密码即可进入。';
+      hint.classList.add('auth-hint-admin');
+    } else if (mode === 'reg'){
+      hint.textContent = '注册需填写邀请码（可向管理员索取）；留空将提示需邀请码。';
+      hint.classList.remove('auth-hint-admin');
+    } else {
+      hint.textContent = '首次使用请先「注册新账号」；首个账号会自动继承本机原有数据（标记/歌单/红心/登录态）。';
+      hint.classList.remove('auth-hint-admin');
+    }
+  }
+  function setMode(m){
+    mode = m;
+    tabLogin.classList.toggle('active', m==='login');
+    tabReg.classList.toggle('active', m==='reg');
+    title.textContent = m==='login' ? '登录' : '注册新账号';
+    submit.textContent = m==='login' ? '登录' : '注册并进入';
+    if (m !== 'reg') inviteEl.value = '';
+    msgEl.textContent = ''; msgEl.className = 'auth-msg';
+    syncInviteVisibility();
+  }
+  userEl.addEventListener('input', syncInviteVisibility);
+  tabLogin.onclick = () => setMode('login');
+  tabReg.onclick = () => setMode('reg');
+
+  async function check(){
+    try{
+      const r = await fetch('/api/auth/me'); const d = await r.json();
+      if(d.logged_in){ showUser(d.username, d.is_admin); }
+      else { overlay.style.display='flex'; }
+    }catch(e){ overlay.style.display='flex'; }
+  }
+  function showUser(u, isAdmin){
+    overlay.style.display='none';
+    userName.textContent = '👤 ' + u;
+    userArea.hidden = false;
+    adminBtn.hidden = !isAdmin;  // 仅管理员显示「账号管理」入口
+    if(restartSvcBtn) restartSvcBtn.hidden = !isAdmin;  // 仅管理员可重启本服务
+  }
+  submit.onclick = async () => {
+    const u = userEl.value.trim(), p = passEl.value;
+    if(!u || !p){ msgEl.textContent='请输入用户名和密码'; return; }
+    const body = {username:u, password:p};
+    if (mode === 'reg') {
+      const code = inviteEl.value.trim();
+      if (!code) { msgEl.textContent = '注册需要邀请码，请联系管理员获取'; return; }
+      body.invite_code = code;
+    }
+    msgEl.textContent='处理中…'; msgEl.className='auth-msg';
+    try{
+      const r = await fetch('/api/auth/' + (mode==='login'?'login':'register'), {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      });
+      const d = await r.json();
+      if(r.ok && d.ok){ location.reload(); }
+      else { msgEl.textContent = d.error || '操作失败'; msgEl.className='auth-msg'; }
+    }catch(e){ msgEl.textContent='网络错误'; }
+  };
+  logoutBtn.onclick = async () => {
+    await fetch('/api/auth/logout', {method:'POST'});
+    location.reload();
+  };
+  adminBtn.onclick = () => { window.open('/admin'); };
+  if(restartSvcBtn){
+    restartSvcBtn.onclick = async () => {
+      if(!confirm('确定重启本服务以加载最新代码？重启期间约 1-2 秒不可用。')) return;
+      try{
+        restartSvcBtn.disabled = true; restartSvcBtn.textContent = '🔄 重启中…';
+        const tk = await (await fetch('/api/restart_token')).json();
+        await fetch('/api/self_restart', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','X-Restart-Token': (tk && tk.token) || ''},
+          body: JSON.stringify({token: (tk && tk.token) || ''})
+        });
+        // launchd 约 10s 内拉起新进程；等待后刷新页面验证新版本
+        setTimeout(() => { location.reload(); }, 12000);
+      }catch(e){
+        restartSvcBtn.disabled = false; restartSvcBtn.textContent = '🔄 重启';
+        alert('重启请求已发出，若页面未自动刷新请手动刷新（Cmd+Shift+R）。');
+      }
+    };
+  }
+  passEl.addEventListener('keydown', e => { if(e.key==='Enter') submit.onclick(); });
+  check();
+})();
+</script>
+<!-- 版本号 footer：从 /api/version 拉真值，初始占位 ↓ -->
+<footer class="app-footer"><span id="appVersion" title="正在拉取版本…">v?.? · 加载中</span></footer>
+<!-- 版本号逻辑必须放在 footer 之后，否则 document.getElementById('appVersion') 拿到 null，所有更新都失败 -->
+<script>
+/* ── 版本号：启动时通过 /api/version 拉取真值覆盖初始占位 ── */
+(function () {
+  const el = document.getElementById('appVersion');
+  const elLogo = document.getElementById('logoVersion');
+  if (!el && !elLogo) return;
+  // 10 秒兜底：拉不到就把"v?.? 加载中"换成"v?-? 未连接"，别让 footer 永远加载中
+  const fallbackTimer = setTimeout(function () {
+    if (el && el.textContent.indexOf('加载中') >= 0) el.textContent = 'v?-? · 未连接';
+  }, 10000);
+  fetch('/api/version', { cache: 'no-store' })
+    .then(function (r) {
+      clearTimeout(fallbackTimer);
+      if (!r.ok) {
+        if (el) el.textContent = 'v?-? · HTTP ' + r.status;
+        return null;
+      }
+      return r.json();
+    })
+    .then(function (d) {
+      if (!d) return;
+      const v = d.version || '?';
+      const date = d.date || '';
+      const uptime = d.uptime_sec
+        ? ' · 已运行 ' + Math.floor(d.uptime_sec / 3600) + '小时' + Math.floor((d.uptime_sec % 3600) / 60) + '分'
+        : '';
+      if (el) {
+        el.textContent = 'v' + v + ' · ' + date + uptime;
+        el.title = d.name || '';
+      }
+      if (elLogo) {
+        elLogo.textContent = 'v' + v;
+        elLogo.title = d.name
+          ? v + ' · ' + d.name + '\n发布日期：' + date + '\n点击查看详细版本说明'
+          : '当前版本 v' + v;
+        elLogo.style.cursor = 'help';
+      }
+    })
+    .catch(function () {
+      clearTimeout(fallbackTimer);
+      if (el) el.textContent = 'v?-? · 网络异常';
+    });
+})();
+</script>
+</body>
+</html>
