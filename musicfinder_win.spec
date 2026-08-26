@@ -25,7 +25,13 @@ a = Analysis(
         # 当成目录名，产出 port.txt/port.txt 这种嵌套，运行时 open() 直接 IsADirectoryError。
         (os.path.join(APP_DIR, '使用说明.md'), '.'),
         (os.path.join(APP_DIR, 'port.txt'), '.'),
-    ],
+    ] + (
+        # Windows 把 Chromium 烤进安装包（CI 先用 PLAYWRIGHT_BROWSERS_PATH 把浏览器下到
+        # 仓库 pw_browsers/，再随包分发），团队用户双击即用、零下载。
+        # macOS 不做这一步（PyInstaller 给嵌套 Chromium.app 重签会失败），改为运行时按需下载。
+        [(os.path.join(APP_DIR, 'pw_browsers'), 'playwright_browsers')]
+        if os.path.exists(os.path.join(APP_DIR, 'pw_browsers')) else []
+    ),
     hiddenimports=[
         'flask', 'jinja2', 'markupsafe', 'werkzeug', 'itsdangerous',
         'click', 'openpyxl', 'et_xmlfile',
@@ -46,8 +52,8 @@ a = Analysis(
         'monitor', 'monitor.db', 'monitor.importer', 'monitor.matcher',
         'monitor.normalize', 'monitor.routes',
         'sqlite3',
-        # Playwright 一键浏览器登录：显式声明以打进包（Chromium 浏览器运行时按需下载到用户级缓存，
-        # 不打包进安装包，避免 macOS PyInstaller ad-hoc 重签失败 + 安装包体积膨胀）
+        # Playwright 一键浏览器登录：Python 包显式声明以打进包；Windows 的 Chromium 浏览器
+        # 二进制通过上方 datas 烤进安装包（零下载），macOS 则在运行时按需下载规避重签失败
         'playwright', 'playwright.sync_api', 'playwright.async_api', 'greenlet',
     ],
     noarchive=False,

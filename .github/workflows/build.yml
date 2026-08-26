@@ -37,9 +37,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # playwright Python 包打入 bundle；Chromium 浏览器二进制不在 CI 下载（避免 macOS ad-hoc 重签失败 + 体积膨胀），
-          # 由运行端首次一键登录时按需下载到用户级缓存
+          # playwright Python 包打入 bundle。Windows 的 Chromium 浏览器二进制在下一步
+          # 下载并烤进安装包（团队用户零下载）；macOS 不在 CI 下载，改由运行端按需下载规避重签失败
           pip install pyinstaller flask openpyxl requests pypinyin pycryptodome playwright
+
+      - name: 下载 Chromium 并烤进 Windows 安装包（团队用户零下载）
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw_browsers
+        run: python -m playwright install chromium
 
       - name: 注入密钥（仅打包时，源码不含密钥）
         shell: bash

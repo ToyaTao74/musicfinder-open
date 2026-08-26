@@ -51,11 +51,16 @@ logger = logging.getLogger('musicfinder')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BUNDLE_DIR = getattr(sys, '_MEIPASS', BASE_DIR)
 
-# 打包后让 Playwright 用用户级默认缓存（macOS: ~/Library/Caches/ms-playwright，
-# Windows: %LOCALAPPDATA%\ms-playwright）。Chromium 不打进安装包——避免 PyInstaller
-# 在 macOS 上给 Chrome for Testing.app 做 ad-hoc 重签失败。首次启动一键登录时按需下载。
+# 打包后 Playwright 浏览器路径（分平台）：
+#   Windows：Chromium 已烤进安装包（bundle 内 playwright_browsers），用户零下载、零等待。
+#   macOS  ：PyInstaller 给嵌套 Chromium.app 做 ad-hoc 重签会失败，故不烤包，
+#            改为首次一键登录时按需下载到用户级缓存（PLAYWRIGHT_BROWSERS_PATH='0'）。
+#            且登录优先复用系统 Chrome（channel='chrome'），多数 Mac 装了 Chrome 则根本不下载。
 if getattr(sys, '_MEIPASS', None):
-    os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '0')
+    if sys.platform.startswith('win'):
+        os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(BUNDLE_DIR, 'playwright_browsers'))
+    else:
+        os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '0')
 
 app = Flask(
     __name__,
@@ -1416,19 +1421,35 @@ def _login_validate(platform, cookie_str):
         return False
 
 
-def ensure_playwright_chromium(timeout=120):
+def ensure_playwright_chromium(timeout=120, on_status=None):
     """确保 Playwright Chromium 已安装（运行 exe 首次一键登录时按需下载）。
 
-    返回 (ok, msg)。PLAYWRIGHT_BROWSERS_PATH 已由上方 bootstrap 设为 '0'（用户默认缓存）。
-    若延迟安装子模块，会尝试在 import 时再补救一次。
+    返回 (ok, msg)。PLAYWRIGHT_BROWSERS_PATH 已由上方 bootstrap 设好：
+      - Windows：指向 bundle 内的 playwright_browsers（已烤进安装包），通常直接就绪、零下载。
+      - macOS  ：指向用户级缓存（'0'），未装则此处按需下载（约 180MB，仅一次）。
+    探测顺序：先试系统 Chrome（channel='chrome'），再试已装 Chromium，都没有才下载。
+    on_status(msg)：下载/准备过程中回传状态，供前端实时展示（避免慢网看起来像卡死）。
     """
+    def _say(m):
+        if on_status:
+            try:
+                on_status(m)
+            except Exception:
+                pass
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return False, '本机没装 Playwright Python 包'
     try:
         with sync_playwright().start() as p:
-            # launch 触发：若浏览器缺失会抛 Error（path to browser doesn't exist）
+            # 优先系统 Chrome（多数 Mac/Win 已装，直接复用，无需下载）
+            try:
+                b = p.chromium.launch(headless=True, channel='chrome')
+                b.close()
+                return True, '已就绪（系统 Chrome）'
+            except Exception:
+                pass
+            # 其次试已烤进包 / 已下载的 Chromium
             try:
                 b = p.chromium.launch(headless=True)
                 b.close()
@@ -1437,17 +1458,17 @@ def ensure_playwright_chromium(timeout=120):
                 pass
     except Exception:
         pass
-    # 浏览器缺失 → 调 playwright CLI 安装；只装 chromium（200MB+，可被系统 Chrome 替代）
+    # 浏览器缺失 → 调 playwright CLI 安装（仅 macOS 无 Chrome 时需要；Windows 烤包基本不会走到这）
     def _have_cli():
-        from playwright._impl._driver import compute_driver_executable, get_driver_env
+        from playwright._impl._driver import compute_driver_executable
         try:
-            cli = compute_driver_executable()
-            return cli
+            return compute_driver_executable()
         except Exception:
             return None
     cli = _have_cli()
     if not cli:
         return False, '未找到 playwright 安装命令'
+    _say('正在准备浏览器：本机未检测到可用浏览器，开始下载 Chromium（约 180MB，仅首次需要，网速慢请稍候）…')
     try:
         import subprocess
         rc = subprocess.run(
@@ -1481,10 +1502,15 @@ def run_browser_login(platform, timeout=360, target='cookies'):
     p = None
     browser = None
     try:
-        # 打包环境：浏览器二进制不内嵌，按需下载到 PLAYWRIGHT_BROWSERS_PATH（用户级缓存）。
-        # 普通失败（无网/超时）清楚提示用户改去「打开登录页手动复制 Cookie」。
+        # 打包环境：Windows 浏览器已烤进包（零下载）；macOS 若本机无 Chrome 则按需下载到
+        # 用户级缓存。下载过程中通过 on_status 实时回传状态，慢网也不像卡死。
         if getattr(sys, '_MEIPASS', None):
-            ok, msg = ensure_playwright_chromium(timeout=120)
+            _status_reg = LOGIN_STATUS if target == 'cookies' else HEART_LOGIN_STATUS
+            def _on_prep(m):
+                st = _status_reg.get(platform)
+                if isinstance(st, dict):
+                    st['message'] = m
+            ok, msg = ensure_playwright_chromium(timeout=120, on_status=_on_prep)
             if not ok:
                 return {'success': False, 'message': f'浏览器未就绪：{msg}。可改用「打开登录页」手动复制 Cookie', 'cookie': '', 'count': 0}
         p = sync_playwright().start()

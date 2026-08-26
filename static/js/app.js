@@ -2489,7 +2489,7 @@ function renderSettings(cookies) {
                 const code = btn.getAttribute('data-code');
                 const resultEl = $(`#cookie-test-${code}`);
                 btn.disabled = true;
-                resultEl.innerHTML = '<span class="cookie-testing">正在打开浏览器，请在弹出的窗口中登录…</span>';
+                resultEl.innerHTML = '<span class="cookie-testing">正在准备浏览器…（若本机未装 Chrome，首次可能需下载约 180MB 浏览器，仅一次；网速慢请稍候，不会卡死）</span>';
                 try {
                     const resp = await fetch(`/api/login/${code}`, { method: 'POST' });
                     const data = await resp.json();
