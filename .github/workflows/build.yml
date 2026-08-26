@@ -19,6 +19,7 @@ name: Build MusicFinder
 on:
   push:
     branches: [main, master, publish]
+    tags: ['v*']          # 推送 v* tag 时触发：自动打包并发布 GitHub Release
   workflow_dispatch:
 
 jobs:
@@ -148,3 +149,49 @@ jobs:
           path: dist/MusicFinder-mac.zip
           # 公开仓库 Actions 存储无配额限制，保留 90 天给用户充足下载窗口
           retention-days: 90
+
+  release:
+    name: 发布 GitHub Release（仅打 tag 时）
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    # 只有推送 v* tag 时才发布；普通 push / 手动运行只出 Artifacts，不发 Release
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read APP_VERSION from app.py
+        id: v
+        shell: bash
+        run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MF-${{ steps.v.outputs.v }}-Windows
+          path: release
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MF-${{ steps.v.outputs.v }}-Mac
+          path: release
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: MusicFinder ${{ github.ref_name }}
+          body: |
+            ## MusicFinder ${{ github.ref_name }} 自动构建
+
+            - **MF-${{ steps.v.outputs.v }}-Windows.exe**：Windows 安装包（双击即用，CloudBase 同步 + Discogs 厂牌查询已内嵌）
+            - **MF-${{ steps.v.outputs.v }}-Mac.zip**：macOS 安装包（解压后拖入应用）
+
+            > 搜索歌曲需先在「Cookie 设置」页用一键浏览器登录自己的音乐账号。
+          files: |
+            release/MusicFinder.exe
+            release/MusicFinder-mac.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
