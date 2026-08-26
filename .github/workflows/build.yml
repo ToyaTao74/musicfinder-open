@@ -58,6 +58,18 @@ jobs:
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
 
+      - name: 注入音乐平台 Cookie（仅打包时，源码不含；团队搜索依赖它）
+        shell: bash
+        env:
+          MUSIC_COOKIES: ${{ secrets.MUSIC_COOKIES }}
+        run: |
+          if [ -n "$MUSIC_COOKIES" ]; then
+            printf '%s' "$MUSIC_COOKIES" > cookies.json
+            echo "cookies.json written ($(wc -c < cookies.json) bytes)"
+          else
+            echo "MUSIC_COOKIES 未设置，跳过（团队需自行在应用内登录音乐平台）"
+          fi
+
       - name: Build with PyInstaller
         run: python -m PyInstaller musicfinder_win.spec --noconfirm
 
@@ -109,6 +121,18 @@ jobs:
               f.write('CLOUDBASE_TOKEN = ' + repr(tok) + '\n')
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
+
+      - name: 注入音乐平台 Cookie（仅打包时，源码不含；团队搜索依赖它）
+        shell: bash
+        env:
+          MUSIC_COOKIES: ${{ secrets.MUSIC_COOKIES }}
+        run: |
+          if [ -n "$MUSIC_COOKIES" ]; then
+            printf '%s' "$MUSIC_COOKIES" > cookies.json
+            echo "cookies.json written ($(wc -c < cookies.json) bytes)"
+          else
+            echo "MUSIC_COOKIES 未设置，跳过（团队需自行在应用内登录音乐平台）"
+          fi
 
       - name: Build with PyInstaller (fresh, avoid stale bundle)
         run: |

@@ -12,6 +12,12 @@ _src = open(os.path.join(APP_DIR, 'app.py'), encoding='utf-8').read()
 _m = _re.search(r"^APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", _src, _re.M)
 APP_VERSION = _m.group(1) if _m else '0.0.0'
 
+# 音乐平台 Cookie：打包时由 CI 从 secret 注入 cookies.json（源码不含），本地开发从仓库读取。
+# 仅在文件存在时打进 bundle（作为 BUNDLED_COOKIE_FILE 只读默认），避免无 cookie 时打包报错。
+_cookie_data = []
+if os.path.exists(os.path.join(APP_DIR, 'cookies.json')):
+    _cookie_data = [(os.path.join(APP_DIR, 'cookies.json'), '.')]
+
 a = Analysis(
     [os.path.join(APP_DIR, 'app.py')],
     pathex=[APP_DIR],
@@ -25,7 +31,7 @@ a = Analysis(
         # 当成目录名，产出 port.txt/port.txt 这种嵌套，运行时 open() 直接 IsADirectoryError。
         (os.path.join(APP_DIR, '使用说明.md'), '.'),
         (os.path.join(APP_DIR, 'port.txt'), '.'),
-    ],
+    ] + _cookie_data,
     hiddenimports=[
         'flask', 'jinja2', 'markupsafe', 'werkzeug', 'itsdangerous',
         'click', 'openpyxl', 'et_xmlfile',
