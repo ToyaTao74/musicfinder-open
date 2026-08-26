@@ -30,7 +30,7 @@
    - `MF-<版本>-Mac`（解压得 `MusicFinder.app`）
 3. 双击运行，浏览器自动打开本地管理页面（默认 `http://127.0.0.1:57074`）。
 
-> **团队免配置**：若维护者已在仓库 `Settings → Secrets` 配置了 `CLOUDBASE_TOKEN` / `CLOUDBASE_URL` / `DISCOGS_TOKEN`，CI 打包时会自动把团队 Token 烤进安装包——下载后双击即用，无需任何设置。
+> **团队免配置（除音乐平台登录态外）**：维护者若在仓库 `Settings → Secrets` 配置了 `CLOUDBASE_TOKEN` / `CLOUDBASE_URL` / `DISCOGS_TOKEN`，CI 会把这三个 Token 烤进安装包——下载后 **CloudBase 云端同步** 与 **Discogs 厂牌查询** 双击即用。而 **音乐平台的登录 Cookie（搜索/收藏量等所需）不会烤进包**，由各成员在自己机器上登录自己的音乐账号、粘贴一次 Cookie 即可（见下方「音乐平台登录」），避免把个人账号凭证散发给全队。
 > 若未配置 Secrets，则安装包内不含密钥，Discogs 与云端同步需自行配置（见下文）。
 
 ### 方式二：从源码运行（开发者）
@@ -61,7 +61,7 @@ python -m PyInstaller musicfinder_mac.spec --noconfirm
 
 ### 维护者：生成「团队免配置」安装包
 
-若要让团队成员**下载后无需任何配置**即可使用 CloudBase 云端同步与 Discogs 厂牌查询，维护者只需：
+若要让团队成员下载后**无需配置即可使用 CloudBase 云端同步与 Discogs 厂牌查询**，维护者只需：
 
 1. 进入仓库 **Settings → Secrets and variables → Actions → New repository secret**，添加三个密钥（值来自你自己的 CloudBase / Discogs 后台，**不要写进代码**）：
    - `CLOUDBASE_URL`：你的 CloudBase mark-sync 地址
@@ -72,6 +72,17 @@ python -m PyInstaller musicfinder_mac.spec --noconfirm
 CI 会在打包阶段用这些 Secrets 生成临时密钥文件并烤进 `MusicFinder.exe` / `MusicFinder.app`，**源码与仓库历史始终不含任何密钥**。
 
 > ⚠️ 安全提示：烤进安装包的 Token 对拿到安装包的人是**可提取**的。仅当分发对象可信（如内部团队）时才建议开启；若对外完全公开分发，请保持 Secrets 为空，让用户各自配置。
+
+#### 音乐平台登录态：由各成员自行粘贴，**不烤进包**
+
+搜索歌曲、抓取收藏量等依赖**音乐平台的登录 Cookie**。刻意**不**把它烤进安装包，原因有二：
+
+- 它等于你的**个人音乐账号凭证**，散发给全队既泄露隐私、又让所有人共用你一个账号会话（cookie 过期/被风控会全队一起挂）；
+- 团队各成员本就该用**各自的**音乐账号。
+
+因此团队流程是：每人下载安装包后，只需在「Cookie 设置」页**登录一次自己的音乐账号并保存 Cookie**（应用支持「打开登录页 → 复制 Cookie → 粘贴」的一键引导，非技术人员也能照提示操作）。之后搜索即正常，无需再碰配置。
+
+> 维护者若确有"连这步也要免"的需求（如全队共用一个专用音乐账号），可临时把 Cookie 放进仓库同级的 `cookies.json` 再本地打包——但**切勿提交该文件**（已被 `.gitignore` 排除），也请知悉这会把账号凭证交给每位下载者。
 
 ---
 
