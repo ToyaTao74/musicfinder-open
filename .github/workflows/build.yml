@@ -74,11 +74,15 @@ jobs:
         shell: bash
         run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
 
+      - name: 重命名为带版本号的安装包（团队下载到本地一看就知版本）
+        shell: bash
+        run: mv "dist/MusicFinder.exe" "dist/MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe"
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: MF-${{ steps.v.outputs.v }}-Windows
-          path: dist/MusicFinder.exe
+          path: dist/MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe
           # 公开仓库 Actions 存储无配额限制，保留 90 天给用户充足下载窗口
           retention-days: 90
 
@@ -135,11 +139,14 @@ jobs:
         shell: bash
         run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
 
+      - name: 重命名为带版本号的安装包（团队下载到本地一看就知版本）
+        run: mv "dist/MusicFinder-mac.zip" "dist/MusicFinder-v${{ steps.v.outputs.v }}-Mac.zip"
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: MF-${{ steps.v.outputs.v }}-Mac
-          path: dist/MusicFinder-mac.zip
+          path: dist/MusicFinder-v${{ steps.v.outputs.v }}-Mac.zip
           # 公开仓库 Actions 存储无配额限制，保留 90 天给用户充足下载窗口
           retention-days: 90
 
@@ -181,12 +188,12 @@ jobs:
           body: |
             ## MusicFinder v${{ steps.v.outputs.v }} 自动构建
 
-            - **MF-${{ steps.v.outputs.v }}-Windows.exe**：Windows 安装包（双击即用，CloudBase 同步 + Discogs 厂牌查询已内嵌）
-            - **MF-${{ steps.v.outputs.v }}-Mac.zip**：macOS 安装包（解压后拖入应用）
+            - **MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe**：Windows 安装包（双击即用，CloudBase 同步 + Discogs 厂牌查询已内嵌）
+            - **MusicFinder-v${{ steps.v.outputs.v }}-Mac.zip**：macOS 安装包（解压后拖入应用）
 
             > 搜索歌曲需先在「Cookie 设置」页用一键浏览器登录自己的音乐账号。
           files: |
-            release/MusicFinder.exe
-            release/MusicFinder-mac.zip
+            release/MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe
+            release/MusicFinder-v${{ steps.v.outputs.v }}-Mac.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
