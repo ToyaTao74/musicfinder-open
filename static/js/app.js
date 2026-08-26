@@ -338,7 +338,56 @@ function _fmtSearchProgress(p) {
     return shown + ' · 正在生成结果…';
 }
 
+// ── 搜索前 Cookie 检测（v4.28.x）：未配置任何平台登录态时，提示用户先去登录 ──
+async function _ensureSearchCookies() {
+    // 返回 true=允许继续搜索；false=用户选择去登录（应放弃本次搜索）
+    try {
+        const resp = await fetch('/api/cookies');
+        if (!resp.ok) return true;            // 接口异常不拦搜索，避免误伤
+        const data = await resp.json();
+        const cookies = (data && data.cookies) || {};
+        const hasAny = Object.values(cookies).some(c => c && c.has_cookie);
+        if (hasAny) return true;              // 已有任一平台 Cookie，放行
+        return await _showCookieLoginModal();
+    } catch (e) {
+        return true;                          // 异常兜底放行
+    }
+}
+
+function _showCookieLoginModal() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px;';
+        overlay.innerHTML = `
+          <div style="background:#fff;max-width:460px;width:100%;border-radius:14px;padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.25);font-family:system-ui,-apple-system,sans-serif;">
+            <div style="font-size:18px;font-weight:700;color:#111;margin-bottom:8px;">需要先登录音乐平台</div>
+            <div style="font-size:14px;color:#444;line-height:1.6;margin-bottom:6px;">
+              搜索歌曲、抓取收藏量等依赖<b>音乐平台的登录 Cookie</b>。当前尚未配置任何平台的 Cookie，搜索可能无结果或数据不全。
+            </div>
+            <div style="font-size:13px;color:#666;line-height:1.6;margin-bottom:16px;">
+              请先到「Cookie 设置」页，点各平台的「浏览器登录」或手动粘贴你的登录 Cookie 并保存。配置好后回来重新搜索即可。
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+              <button id="mfCookieCancel" style="padding:9px 16px;border:1px solid #ccc;background:#f5f5f5;border-radius:8px;cursor:pointer;font-size:14px;">仍要搜索</button>
+              <button id="mfCookieGo" style="padding:9px 16px;border:none;background:#16a34a;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;">去 Cookie 设置</button>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = (proceed) => { overlay.remove(); resolve(proceed); };
+        overlay.querySelector('#mfCookieGo').addEventListener('click', () => {
+            close(false);
+            const tab = document.querySelector('.tab-btn[data-tab="settings"]');
+            if (tab) tab.click();
+        });
+        overlay.querySelector('#mfCookieCancel').addEventListener('click', () => close(true));
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(true); });
+    });
+}
+
 async function doSearch() {
+    // 搜索前先确认已配置音乐平台 Cookie，否则引导去登录（不阻塞已有 Cookie 的用户）
+    if (!(await _ensureSearchCookies())) return;
+
     if (searchMode === 'lyric') return doLyricSearch();
 
     const songName = songNameInput.value.trim();

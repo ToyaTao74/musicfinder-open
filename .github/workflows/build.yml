@@ -58,6 +58,14 @@ jobs:
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
 
+      - name: 安装 Playwright 与 Chromium（供打包后一键浏览器登录）
+        shell: bash
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw_browsers
+        run: |
+          pip install playwright
+          python -m playwright install chromium
+
       - name: Build with PyInstaller
         run: python -m PyInstaller musicfinder_win.spec --noconfirm
 
@@ -109,6 +117,14 @@ jobs:
               f.write('CLOUDBASE_TOKEN = ' + repr(tok) + '\n')
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
+
+      - name: 安装 Playwright 与 Chromium（供打包后一键浏览器登录）
+        shell: bash
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw_browsers
+        run: |
+          pip install playwright
+          python -m playwright install chromium
 
       - name: Build with PyInstaller (fresh, avoid stale bundle)
         run: |

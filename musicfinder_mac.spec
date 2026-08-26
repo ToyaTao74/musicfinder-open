@@ -27,7 +27,7 @@ a = Analysis(
         # 当成目录名，产出 port.txt/port.txt 这种嵌套，运行时 open() 直接 IsADirectoryError。
         (os.path.join(APP_DIR, '使用说明.md'), '.'),
         (os.path.join(APP_DIR, 'port.txt'), '.'),
-    ],
+    ] + ([(os.path.join(APP_DIR, 'pw_browsers'), 'playwright_browsers')] if os.path.exists(os.path.join(APP_DIR, 'pw_browsers')) else []),
     hiddenimports=[
         'flask', 'jinja2', 'markupsafe', 'werkzeug', 'itsdangerous',
         'click', 'openpyxl', 'et_xmlfile',
@@ -48,10 +48,9 @@ a = Analysis(
         'monitor', 'monitor.db', 'monitor.importer', 'monitor.matcher',
         'monitor.normalize', 'monitor.routes',
         'sqlite3',
+        # Playwright 一键浏览器登录：显式声明以打进包（Chromium 浏览器二进制由 CI 下载后随 bundle 提供）
+        'playwright', 'playwright.sync_api', 'playwright.async_api', 'greenlet',
     ],
-    # Playwright 为可选增强（登录/酷我词曲/汽水搜索），运行时 try/except 兜底；
-    # 打包环境不收集浏览器二进制，故整体排除，避免体积膨胀与无用依赖
-    excludes=['playwright', 'playwright.sync_api', 'playwright._impl'],
     noarchive=False,
 )
 
