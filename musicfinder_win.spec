@@ -25,7 +25,7 @@ a = Analysis(
         # 当成目录名，产出 port.txt/port.txt 这种嵌套，运行时 open() 直接 IsADirectoryError。
         (os.path.join(APP_DIR, '使用说明.md'), '.'),
         (os.path.join(APP_DIR, 'port.txt'), '.'),
-    ] + ([(os.path.join(APP_DIR, 'pw_browsers'), 'playwright_browsers')] if os.path.exists(os.path.join(APP_DIR, 'pw_browsers')) else []),
+    ],
     hiddenimports=[
         'flask', 'jinja2', 'markupsafe', 'werkzeug', 'itsdangerous',
         'click', 'openpyxl', 'et_xmlfile',
@@ -46,7 +46,8 @@ a = Analysis(
         'monitor', 'monitor.db', 'monitor.importer', 'monitor.matcher',
         'monitor.normalize', 'monitor.routes',
         'sqlite3',
-        # Playwright 一键浏览器登录：显式声明以打进包（Chromium 浏览器二进制由 CI 下载后随 bundle 提供）
+        # Playwright 一键浏览器登录：显式声明以打进包（Chromium 浏览器运行时按需下载到用户级缓存，
+        # 不打包进安装包，避免 macOS PyInstaller ad-hoc 重签失败 + 安装包体积膨胀）
         'playwright', 'playwright.sync_api', 'playwright.async_api', 'greenlet',
     ],
     noarchive=False,

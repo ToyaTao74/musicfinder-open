@@ -37,7 +37,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller flask openpyxl requests pypinyin pycryptodome
+          # playwright Python 包打入 bundle；Chromium 浏览器二进制不在 CI 下载（避免 macOS ad-hoc 重签失败 + 体积膨胀），
+          # 由运行端首次一键登录时按需下载到用户级缓存
+          pip install pyinstaller flask openpyxl requests pypinyin pycryptodome playwright
 
       - name: 注入密钥（仅打包时，源码不含密钥）
         shell: bash
@@ -58,14 +60,6 @@ jobs:
               f.write('CLOUDBASE_TOKEN = ' + repr(tok) + '\n')
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
-
-      - name: 安装 Playwright 与 Chromium（供打包后一键浏览器登录）
-        shell: bash
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw_browsers
-        run: |
-          pip install playwright
-          python -m playwright install chromium
 
       - name: Build with PyInstaller
         run: python -m PyInstaller musicfinder_win.spec --noconfirm
@@ -97,7 +91,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller flask openpyxl requests pypinyin pycryptodome
+          # playwright Python 包打入 bundle；Chromium 浏览器二进制不在 CI 下载（避免 macOS ad-hoc 重签失败 + 体积膨胀），
+          # 由运行端首次一键登录时按需下载到用户级缓存
+          pip install pyinstaller flask openpyxl requests pypinyin pycryptodome playwright
 
       - name: 注入密钥（仅打包时，源码不含密钥）
         shell: bash
@@ -118,14 +114,6 @@ jobs:
               f.write('CLOUDBASE_TOKEN = ' + repr(tok) + '\n')
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
-
-      - name: 安装 Playwright 与 Chromium（供打包后一键浏览器登录）
-        shell: bash
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw_browsers
-        run: |
-          pip install playwright
-          python -m playwright install chromium
 
       - name: Build with PyInstaller (fresh, avoid stale bundle)
         run: |
