@@ -14,6 +14,8 @@ import traceback
 
 from flask import Blueprint, jsonify, request, send_file
 
+import sqlite3
+
 from . import db, detect, importer
 from .engine import run_task
 
@@ -101,6 +103,59 @@ def api_import_commit():
         return jsonify({'ok': True, 'data': stat})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 400
+
+
+@bp.route('/import/from-monitor', methods=['POST'])
+def api_import_from_monitor():
+    """把「数据监控」页已筛选的歌单一键导入授权曲库（免去 Excel 中转）。
+
+    直接读取 monitor.db 的 song_archive 表，批量 upsert 到 evidence 的 catalog 表。
+    - only_enabled=true（默认）：只导 enabled=1 的（即用户筛选过、在监控的歌）。
+    - only_enabled=false：导全部。
+    字段映射：song_archive(song_name/artist/album/lyricist/composer) -> catalog 同名字段。
+    """
+    body = request.get_json(silent=True) or {}
+    only_enabled = body.get('only_enabled', True)
+    monitor_db = os.path.join(db.DATA_DIR, 'monitor.db')
+    if not os.path.exists(monitor_db):
+        return jsonify({'ok': False,
+                        'error': '未找到数据监控库（monitor.db），请先在「数据监控」页导入并筛选歌单'}), 400
+    try:
+        src = sqlite3.connect(monitor_db, timeout=10)
+        src.row_factory = sqlite3.Row
+        where = 'WHERE enabled=1' if only_enabled else ''
+        rows = src.execute(
+            f'SELECT song_name, artist, album, lyricist, composer '
+            f'FROM song_archive {where} ORDER BY id').fetchall()
+        src.close()
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'读取数据监控库失败：{e}'}), 500
+
+    imported, skipped = 0, 0
+    for r in rows:
+        name = (r['song_name'] or '').strip()
+        if not name:
+            skipped += 1
+            continue
+        db.upsert_catalog(
+            song_name=name,
+            artist=(r['artist'] or '').strip(),
+            album=(r['album'] or '').strip(),
+            version='',
+            copyright_company='',
+            lyricist=(r['lyricist'] or '').strip(),
+            composer=(r['composer'] or '').strip(),
+            batch='from_monitor',
+        )
+        imported += 1
+
+    db.init_db()
+    return jsonify({'ok': True, 'data': {
+        'imported': imported,
+        'skipped': skipped,
+        'monitor_total': imported + skipped,
+        'catalog_total': db.catalog_count(),
+    }})
 
 
 def _save_upload():

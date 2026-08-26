@@ -139,6 +139,7 @@
   function bind() {
     $('#evCatalogPick').addEventListener('click', () => $('#evCatalogFile').click());
     $('#evCatalogFile').addEventListener('change', onCatalog);
+    $('#evFromMonitorBtn').addEventListener('click', onImportFromMonitor);
     $('#evStart').addEventListener('click', onStart);
     $('#evRefresh').addEventListener('click', () => { loadStats(); loadTasks(); });
     $('#evTaskSelect').addEventListener('change', e => { state.taskId = Number(e.target.value); state.selected.clear(); loadDashboard(); });
@@ -172,6 +173,25 @@
       msg.textContent = `已导入 ${commit.data.inserted} 首（共 ${commit.data.catalog_total}）`; msg.className = 'ev-msg ok';
       loadStats();
     } catch (e) { msg.textContent = '导入失败：' + e.message; msg.className = 'ev-msg err'; }
+  }
+
+  async function onImportFromMonitor() {
+    const onlyEnabled = $('#evFromMonitorEnabled') ? $('#evFromMonitorEnabled').checked : true;
+    const msg = $('#evFromMonitorMsg');
+    if (!msg) return;
+    msg.textContent = '导入中…'; msg.className = 'ev-msg';
+    try {
+      const r = await api('/api/evidence/import/from-monitor', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ only_enabled: onlyEnabled })
+      });
+      const d = r.data;
+      msg.textContent = `已导入 ${d.imported} 首（跳过 ${d.skipped} 首空行），曲库共 ${d.catalog_total} 首`;
+      msg.className = 'ev-msg ok';
+      loadStats();
+    } catch (e) {
+      msg.textContent = '导入失败：' + e.message; msg.className = 'ev-msg err';
+    }
   }
 
   async function onStart() {

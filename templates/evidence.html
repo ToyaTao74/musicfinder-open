@@ -25,6 +25,11 @@
         <input type="file" id="evCatalogFile" accept=".xlsx,.xlsm,.xls,.csv" hidden>
         <button class="button secondary" id="evCatalogPick" type="button">选择 Excel</button>
         <span id="evCatalogMsg" class="ev-msg"></span>
+        <hr class="ev-rule">
+        <p class="ev-hint">或从「数据监控」页已筛选的歌单一键导入（免 Excel 中转）：</p>
+        <label class="ev-check"><input type="checkbox" id="evFromMonitorEnabled" checked><span>仅导入启用监控的歌曲</span></label>
+        <button class="button secondary" id="evFromMonitorBtn" type="button">从数据监控导入</button>
+        <span id="evFromMonitorMsg" class="ev-msg"></span>
       </div>
 
       <div class="ev-card">
