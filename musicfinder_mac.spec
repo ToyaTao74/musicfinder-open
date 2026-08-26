@@ -6,6 +6,12 @@ import os
 SPEC_DIR = os.path.dirname(os.path.abspath(SPEC)) if 'SPEC' in globals() else os.path.dirname(os.path.abspath(__file__))
 APP_DIR = SPEC_DIR
 
+# 版本号单一来源：从 app.py 的 APP_VERSION 读取，避免包名/内部版本号不同步
+import re as _re
+_src = open(os.path.join(APP_DIR, 'app.py'), encoding='utf-8').read()
+_m = _re.search(r"^APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", _src, _re.M)
+APP_VERSION = _m.group(1) if _m else '0.0.0'
+
 block_cipher = None
 
 a = Analysis(
@@ -78,8 +84,8 @@ app = BUNDLE(
         'CFBundleName': 'MusicFinder',
         'CFBundleDisplayName': 'MusicFinder',
         'CFBundleIdentifier': 'com.musicfinder.app',
-        'CFBundleVersion': '4.28.0',
-        'CFBundleShortVersionString': '4.28.0',
+        'CFBundleVersion': APP_VERSION,
+        'CFBundleShortVersionString': APP_VERSION,
         'CFBundleDocumentTypes': [],
     },
 )

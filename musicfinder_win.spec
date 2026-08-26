@@ -6,6 +6,12 @@ import os
 SPEC_DIR = os.path.dirname(os.path.abspath(SPEC)) if 'SPEC' in globals() else os.path.dirname(os.path.abspath(__file__))
 APP_DIR = SPEC_DIR
 
+# 版本号单一来源：从 app.py 的 APP_VERSION 读取，避免包名/内部版本号不同步
+import re as _re
+_src = open(os.path.join(APP_DIR, 'app.py'), encoding='utf-8').read()
+_m = _re.search(r"^APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", _src, _re.M)
+APP_VERSION = _m.group(1) if _m else '0.0.0'
+
 a = Analysis(
     [os.path.join(APP_DIR, 'app.py')],
     pathex=[APP_DIR],
@@ -67,4 +73,15 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # 版本元数据：右键 exe → 属性 → 详细信息里显示版本号（与 APP_VERSION 同步）
+    version_info={
+        'version': APP_VERSION,
+        'company_name': 'MusicFinder',
+        'file_description': 'MusicFinder 音乐匹配器',
+        'internal_name': 'MusicFinder',
+        'legal_copyright': 'MusicFinder',
+        'original_filename': 'MusicFinder.exe',
+        'product_name': 'MusicFinder',
+        'product_version': APP_VERSION,
+    },
 )
