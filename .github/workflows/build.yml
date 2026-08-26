@@ -205,6 +205,8 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
     steps:
+      - uses: actions/checkout@v4
+
       - name: 检查 COS 密钥是否已配置（未配置则跳过同步，不阻塞发版）
         id: coscheck
         env:
@@ -231,37 +233,24 @@ jobs:
           printf 'cos:\n  base:\n    secretid: %s\n    secretkey: %s\n    sessiontoken: ""\n  buckets:\n  - name: %s\n    region: %s\n    alias: mf\n' \
             "$COS_SECRET_ID" "$COS_SECRET_KEY" "$COS_BUCKET" "$COS_REGION" > "$HOME/.cos.yaml"
           ./coscli --version || echo "coscli 下载/执行异常"
-      - uses: actions/checkout@v4
 
       - name: Read APP_VERSION
         id: v
         run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
 
       - name: Download Windows artifact
+        if: steps.coscheck.outputs.skip != '1'
         uses: actions/download-artifact@v4
         with:
           name: MF-${{ steps.v.outputs.v }}-Windows
           path: out
 
       - name: Download macOS artifact
+        if: steps.coscheck.outputs.skip != '1'
         uses: actions/download-artifact@v4
         with:
           name: MF-${{ steps.v.outputs.v }}-Mac
           path: out
-
-      - name: 安装 coscli 并生成配置
-        env:
-          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
-          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
-          COS_BUCKET: ${{ secrets.COS_BUCKET }}
-          COS_REGION: ${{ secrets.COS_REGION }}
-        run: |
-          curl -L -o coscli "https://github.com/Tencent/coscli/releases/latest/download/coscli-linux-amd64"
-          chmod +x coscli
-          # 用 printf 生成配置，避免 heredoc 在 YAML 缩进下无法终止的问题
-          printf 'cos:\n  base:\n    secretid: %s\n    secretkey: %s\n    sessiontoken: ""\n  buckets:\n  - name: %s\n    region: %s\n    alias: mf\n' \
-            "$COS_SECRET_ID" "$COS_SECRET_KEY" "$COS_BUCKET" "$COS_REGION" > "$HOME/.cos.yaml"
-          ./coscli --version || echo "coscli 下载/执行异常"
 
       - name: 上传到 COS（带版本号 + latest 固定直链，均公开可读）
         if: steps.coscheck.outputs.skip != '1'
