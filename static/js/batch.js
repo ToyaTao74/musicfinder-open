@@ -268,6 +268,8 @@
             alert('请至少输入一首歌（含歌名）');
             return;
         }
+        // 搜索前确认已配置音乐平台 Cookie（空白则引导去登录）；不阻塞已有 Cookie 的用户
+        if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
         let v2Mode = v2Toggle && v2Toggle.checked;
         // 双保险：≥500 首强制走 v2（同步模式一次性 fetch 会卡死在"准备查询"，且无取消能力）
         if (songs.length >= 500 && v2Toggle) {

@@ -364,6 +364,8 @@
     // 刷新固定清单数据：后台按平台 ID 重新查，回填最新收藏/在听/评论
     async function refreshPinnedData() {
         if (!pinnedList.length) { showToast('固定清单是空的，先点版本上的「📌固定」', ''); return; }
+        // 刷新前确认已配置音乐平台 Cookie（空白则引导去登录）
+        if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
         plRefreshPinBtn.disabled = true;
         const old = plRefreshPinBtn.textContent;
         plRefreshPinBtn.textContent = '刷新中…';
@@ -854,6 +856,8 @@
                 const code = platBox.getAttribute('data-platform') || '';
                 const row = entry.platform_data && entry.platform_data[code];
                 if (!row) { showToast('该平台无数据可重抓', 'err'); return; }
+                // 重抓前确认已配置音乐平台 Cookie（空白则引导去登录）
+                if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
                 refetchBtn.disabled = true;
                 refetchBtn.textContent = '重抓中…';
                 fetch('/api/refetch', {
@@ -1172,6 +1176,8 @@
     async function importAndSearch() {
         const songs = parseSongs(plSongInput.value);
         if (!songs.length) { alert('请至少输入一首歌（含歌名）'); return; }
+        // 导入并搜索前确认已配置音乐平台 Cookie（空白则引导去登录）
+        if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
         streaming = true;
         plImportBtn.disabled = true;
         plProgressWrap.hidden = false;
@@ -1215,6 +1221,8 @@
     // ── 重新查询（SSE 流式）──
     if (plResearchBtn) {
         plResearchBtn.addEventListener('click', async function () {
+            // 重新搜索前确认已配置音乐平台 Cookie（空白则引导去登录）
+            if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
             plResearchBtn.disabled = true;
             plProgressWrap.hidden = false;
             plResultSection.hidden = true;

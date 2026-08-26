@@ -1622,7 +1622,7 @@ resultsBody.addEventListener('click', (e) => {
 });
 
 // v4.17：搜索页每平台卡「↻ 重抓」按钮（复用 /api/refetch）
-resultsBody.addEventListener('click', (e) => {
+resultsBody.addEventListener('click', async (e) => {
     const refetchBtn = e.target.closest('.pl-refetch');
     if (!refetchBtn) return;
     e.stopPropagation();
@@ -1634,6 +1634,8 @@ resultsBody.addEventListener('click', (e) => {
     const g = getVisibleRows()[idx] || allResults[idx];
     const row = (g && g.platform_data && g.platform_data[code]);
     if (!row) { showToast('该平台无数据可重抓', 'err'); return; }
+    // 重抓前确认已配置音乐平台 Cookie（空白则引导去登录）
+    if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
     const oldText = refetchBtn.textContent;
     refetchBtn.disabled = true;
     refetchBtn.textContent = '重抓中…';
