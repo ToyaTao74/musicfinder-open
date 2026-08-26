@@ -223,7 +223,7 @@ jobs:
           name: MF-${{ steps.v.outputs.v }}-Mac
           path: out
 
-      - name: 安装并配置 coscli
+      - name: 安装 coscli 并生成配置
         env:
           COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
           COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
@@ -232,17 +232,10 @@ jobs:
         run: |
           curl -L -o coscli "https://github.com/Tencent/coscli/releases/latest/download/coscli-linux-amd64"
           chmod +x coscli
-          cat > "$HOME/.cos.yaml" <<EOF
-          cos:
-            base:
-              secretid: $COS_SECRET_ID
-              secretkey: $COS_SECRET_KEY
-              sessiontoken: ""
-            buckets:
-            - name: $COS_BUCKET
-              region: $COS_REGION
-              alias: mf
-          EOF
+          # 用 printf 生成配置，避免 heredoc 在 YAML 缩进下无法终止的问题
+          printf 'cos:\n  base:\n    secretid: %s\n    secretkey: %s\n    sessiontoken: ""\n  buckets:\n  - name: %s\n    region: %s\n    alias: mf\n' \
+            "$COS_SECRET_ID" "$COS_SECRET_KEY" "$COS_BUCKET" "$COS_REGION" > "$HOME/.cos.yaml"
+          ./coscli --version || echo "coscli 下载/执行异常"
 
       - name: 上传到 COS（带版本号 + latest 固定直链，均公开可读）
         env:
