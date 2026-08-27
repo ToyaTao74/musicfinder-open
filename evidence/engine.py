@@ -66,7 +66,16 @@ def run_task(task_id, song_name, artist='', version='', platforms=None, opts=Non
     if need_login and discovered == 0:
         db.finish_task(task_id, db.TASK_NEEDS_LOGIN, message='抖音需登录后才能抓取（CLI 登录一次即可）')
     elif discovered == 0:
-        db.finish_task(task_id, db.TASK_EMPTY, message='三个平台均未发现相关作品')
+        # 动态按实际查询的平台数生成消息（之前写死"三个平台"，勾 1 个时误导）
+        names = [D.PLATFORM_NAMES.get(p, p) for p in platforms]
+        if len(names) == 1:
+            msg = f'{names[0]} 未发现相关作品'
+        elif len(names) == 2:
+            msg = f'{names[0]}、{names[1]} 均未发现相关作品'
+        else:
+            joined = '、'.join(names[:-1]) + f'和{names[-1]}'
+            msg = f'{joined} 均未发现相关作品'
+        db.finish_task(task_id, db.TASK_EMPTY, message=msg)
     elif qualified == 0:
         db.finish_task(task_id, db.TASK_PARTIAL, message='已发现作品，但均未达证据阈值')
     else:
