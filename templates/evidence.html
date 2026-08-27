@@ -37,6 +37,14 @@
         <label class="ev-label">歌名<input id="evSong" required placeholder="例如：你丢下了我爱上了谁"></label>
         <label class="ev-label">歌手<input id="evArtist" placeholder="例如：蒋蕙林"></label>
         <label class="ev-label">版本<input id="evVersion" placeholder="选填，例如：粤语版"></label>
+        <div class="ev-link-parse">
+          <span class="ev-link-hint">或贴抖音视频链接反查原曲：</span>
+          <div class="ev-link-row">
+            <input id="evDouyinUrl" class="ev-link-input" placeholder="https://v.douyin.com/xxx">
+            <button class="button secondary" id="evDouyinParseBtn" type="button">反查</button>
+          </div>
+          <span id="evDouyinParseMsg" class="ev-msg"></span>
+        </div>
         <fieldset class="ev-fieldset">
           <legend>平台</legend>
           <label class="ev-check"><input type="checkbox" name="evPlatform" value="netease" checked><span>网易云</span></label>

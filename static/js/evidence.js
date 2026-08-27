@@ -141,6 +141,10 @@
     $('#evCatalogFile').addEventListener('change', onCatalog);
     $('#evFromMonitorBtn').addEventListener('click', onImportFromMonitor);
     $('#evStart').addEventListener('click', onStart);
+    $('#evDouyinParseBtn').addEventListener('click', onDouyinParse);
+    $('#evDouyinUrl').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); onDouyinParse(); }
+    });
     $('#evRefresh').addEventListener('click', () => { loadStats(); loadTasks(); });
     $('#evTaskSelect').addEventListener('change', e => { state.taskId = Number(e.target.value); state.selected.clear(); loadDashboard(); });
     ['evPlatformFilter', 'evThresholdFilter', 'evPiracyFilter', 'evReviewFilter'].forEach(id =>
@@ -210,6 +214,48 @@
       await loadTasks();
       startPolling();
     } catch (e) { msg.textContent = '失败：' + e.message; msg.className = 'ev-msg err'; }
+  }
+
+  async function onDouyinParse() {
+    const url = ($('#evDouyinUrl').value || '').trim();
+    const msg = $('#evDouyinParseMsg');
+    const btn = $('#evDouyinParseBtn');
+    if (!url) { msg.textContent = '请粘贴抖音链接'; msg.className = 'ev-msg err'; return; }
+    if (!/douyin\.com/i.test(url)) { msg.textContent = '不是抖音链接（需含 douyin.com）'; msg.className = 'ev-msg err'; return; }
+    msg.textContent = '反查中…（首次需打开抖音页面，1-3 秒）'; msg.className = 'ev-msg';
+    btn.disabled = true;
+    try {
+      const r = await api('/api/evidence/douyin/parse-link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      if (r && r.data && r.data.needs_login) {
+        msg.innerHTML = '⚠️ 还没登录抖音：<a href="#" id="evParseOpenDouyin">点此扫码登录</a>';
+        msg.className = 'ev-msg err';
+        $('#evParseOpenDouyin').addEventListener('click', e => { e.preventDefault(); openDouyinLoginModal(); });
+        return;
+      }
+      const info = (r && r.data) || {};
+      if (!info.music_name) {
+        msg.innerHTML = '⚠️ 没识别到原曲：' + ((r && r.error) || '可能不是 BGM 视频');
+        msg.className = 'ev-msg err';
+        return;
+      }
+      // 反查成功：回填表单
+      $('#evSong').value = info.music_name;
+      if (info.music_author) $('#evArtist').value = info.music_author;
+      const dchk = document.querySelector('input[name=evPlatform][value=douyin]');
+      if (dchk && !dchk.checked) dchk.checked = true;
+      let summary = `✅ 已填入：${info.music_name}` + (info.music_author ? `（${info.music_author}）` : '');
+      if (info.video_blogger) summary += ` · 上传者 ${info.video_blogger}`;
+      msg.textContent = summary;
+      msg.className = 'ev-msg ok';
+    } catch (e) {
+      msg.textContent = '反查失败：' + e.message;
+      msg.className = 'ev-msg err';
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   async function setReview(status) {

@@ -160,6 +160,89 @@ def _urlencode(s):
     return urllib.parse.quote(s)
 
 
+def parse_video_url(url, headless=True, timeout_ms=20000):
+    """给定一个抖音视频链接（短链/长链均可），用登录态加载页面，提取：
+        music_name    原曲/原声名称
+        music_author  原声账号（汽水音乐上的演唱者）
+        video_blogger 视频上传者昵称
+        video_title   视频描述（前 200 字）
+        video_url     解析后的长链（短链已展开）
+    未登录返回 {'needs_login': True}，异常返回 {'error': '...'}。
+    """
+    state = _load_state()
+    if not state:
+        return {'needs_login': True}
+    try:
+        from patchright.sync_api import sync_playwright
+    except Exception as e:
+        return {'error': f'未安装 patchright: {e}'}
+
+    info = {'music_name': '', 'music_author': '', 'video_blogger': '',
+            'video_title': '', 'video_url': ''}
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=headless, channel='chrome')
+            ctx = browser.new_context(storage_state=STATE_PATH)
+            page = ctx.new_page()
+            page.goto(url, wait_until='domcontentloaded', timeout=timeout_ms)
+            page.wait_for_timeout(2500)  # 等 BGM 区渲染
+
+            # 视频上传者：左下角昵称
+            for sel in ['[data-e2e="video-author-name"]',
+                        '[data-e2e="video-author"] span',
+                        'div[data-e2e="user-info"] a span']:
+                el = page.query_selector(sel)
+                if el:
+                    t = el.inner_text().strip()
+                    if t:
+                        info['video_blogger'] = t
+                        break
+
+            # 音乐信息（核心）：title 属性通常是歌名，inner_text 是作者
+            for sel in ['[data-e2e="video-music-info"] a[title]',
+                        'div[class*="video-music"] a',
+                        'a[data-e2e="music-name"]']:
+                el = page.query_selector(sel)
+                if el:
+                    title = (el.get_attribute('title') or '').strip()
+                    if title:
+                        info['music_name'] = title
+                        info['music_author'] = (el.inner_text() or '').strip()
+                        break
+
+            # 兜底：从 music-info 整体文本里尝试 "♫ 原声 - 歌名 - 作者"
+            if not info['music_name']:
+                import re
+                for sel in ['[data-e2e="video-music-info"]',
+                            'div[class*="video-music"]']:
+                    el = page.query_selector(sel)
+                    if el:
+                        t = (el.inner_text() or '').strip()
+                        m = re.search(r'原声\s*[-–—]\s*([^-\n]+?)\s*[-–—]\s*(\S+)', t)
+                        if m:
+                            info['music_name'] = m.group(1).strip()
+                            info['music_author'] = m.group(2).strip()
+                            break
+
+            # 视频描述（发布者写的文案）
+            for sel in ['[data-e2e="video-desc"]',
+                        'div[class*="video-info-detail"] h1',
+                        'h1']:
+                el = page.query_selector(sel)
+                if el:
+                    t = el.inner_text().strip()
+                    if t and len(t) > 1:
+                        info['video_title'] = t[:200]
+                        break
+
+            info['video_url'] = page.url  # 短链解析后的长链
+            browser.close()
+    except Exception as e:
+        return {'error': f'抖音链接解析失败: {e}'}
+
+    return info
+
+
 if __name__ == '__main__':
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else ''

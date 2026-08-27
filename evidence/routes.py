@@ -316,6 +316,28 @@ def api_douyin_check():
     }})
 
 
+@bp.route('/douyin/parse-link', methods=['POST'])
+def api_douyin_parse_link():
+    """贴一个抖音视频链接，反查原曲信息（歌名/歌手/上传者）。"""
+    url = ((request.get_json(silent=True) or {}).get('url') or '').strip()
+    if not url:
+        return jsonify({'ok': False, 'error': '请提供抖音视频链接'}), 400
+    if 'douyin.com' not in url.lower():
+        return jsonify({'ok': False, 'error': '不是抖音链接（需含 douyin.com）'}), 400
+    try:
+        from .platforms.douyin import parse_video_url
+        info = parse_video_url(url, headless=True)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'解析失败: {e}'}), 500
+    if info.get('needs_login'):
+        return jsonify({'ok': False, 'error': '请先登录抖音（证据页右上角点「📱 立即扫码登录抖音」）', 'needs_login': True}), 200
+    if info.get('error'):
+        return jsonify({'ok': False, 'error': info['error']}), 200
+    if not info.get('music_name'):
+        return jsonify({'ok': False, 'error': '未能识别原曲名（可能不是 BGM 视频，或页面结构变化）', 'info': info}), 200
+    return jsonify({'ok': True, 'data': info})
+
+
 # ═══════════════════════════════════════════════════
 #  导出 Excel
 # ═══════════════════════════════════════════════════
