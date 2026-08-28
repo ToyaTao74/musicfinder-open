@@ -5,6 +5,12 @@
 
 .ev-page { padding: 4px 0; }
 
+/* 优先级分徽标（仅「优先级分」排序时显示） */
+.ev-song { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ev-prio { display: inline-block; font-size: 11px; font-weight: 700; color: #ea580c;
+  background: rgba(234,88,12,.12); border: 1px solid rgba(234,88,12,.28);
+  border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+
 .ev-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
 .ev-overline { font-size: 12px; color: var(--text-tertiary, #888); letter-spacing: .08em; font-weight: 600; margin: 0 0 2px; }
 .ev-title { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -.02em; color: var(--text-primary, #111); }
@@ -55,26 +61,126 @@
 .ev-msg.ok { color: #16a34a; }
 .ev-msg.err { color: #e63946; }
 
-.ev-task-status { font-size: 13px; color: var(--text-secondary, #555); margin-bottom: 12px; min-height: 20px; }
-.ev-task-status .run { color: var(--accent, #e63946); font-weight: 600; }
+.ev-task-status { font-size: 13px; color: var(--text-secondary, #555); margin-bottom: 14px; min-height: 20px; }
+
+/* 任务与结果：当前任务状态卡片 */
+.ev-task-card { display: flex; gap: 12px; align-items: flex-start; padding: 13px 15px; border-radius: 12px; background: rgba(0,0,0,.025); border: 1px solid rgba(0,0,0,.07); margin-bottom: 14px; }
+.ev-task-badge { flex-shrink: 0; font-size: 13px; font-weight: 800; color: #fff; background: var(--accent, #e63946); padding: 5px 11px; border-radius: 9px; line-height: 1.25; letter-spacing: .02em; }
+.ev-task-main { flex: 1; min-width: 0; }
+.ev-task-name { font-size: 16px; font-weight: 700; color: var(--text-primary, #111); margin-bottom: 7px; letter-spacing: -.01em; line-height: 1.35; }
+.ev-task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary, #555); }
+.ev-task-meta .ev-pill { font-size: 11px; padding: 2px 9px; }
+.ev-task-metric { color: var(--text-secondary, #555); }
+.ev-task-metric b { color: var(--text-primary, #111); font-weight: 700; font-variant-numeric: tabular-nums; }
+.ev-task-msg { color: var(--text-tertiary, #999); font-size: 12px; }
+
+/* 任务状态 pill 配色 */
+.ev-pill.task-run { background: rgba(37,99,235,.14); color: #2563eb; }
+.ev-pill.task-done { background: rgba(22,163,74,.14); color: #16a34a; }
+.ev-pill.task-warn { background: rgba(255,107,0,.14); color: #ff6b00; }
+.ev-pill.task-bad { background: rgba(230,57,70,.16); color: #e63946; }
+.ev-pill.task-idle { background: rgba(120,120,120,.14); color: #666; }
 
 .ev-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .ev-filters select { padding: 7px 10px; border-radius: 9px; border: 1px solid var(--glass-border, rgba(0,0,0,.12)); background: var(--bg-input, #fff); color: var(--text-primary, #111); font-size: 13px; }
 .ev-filters button { padding: 7px 12px; }
 
-.ev-table-wrap { overflow-x: auto; }
-.ev-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ev-table th, .ev-table td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--glass-border, rgba(0,0,0,.07)); vertical-align: top; }
-.ev-table th { font-size: 12px; color: var(--text-tertiary, #888); font-weight: 600; position: sticky; top: 0; background: var(--glass-bg, #fff); }
+.ev-table-wrap { overflow-x: auto; border-radius: var(--radius-md, 12px); border: 1px solid rgba(0,0,0,.05); }
+.ev-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.ev-table thead th { background: rgba(0,0,0,.025); border-bottom: 1px solid rgba(0,0,0,.08); }
+.ev-table tbody tr { transition: background .15s ease; }
+.ev-table tbody tr:hover { background: rgba(0,0,0,.015); }
+.ev-table th, .ev-table td { padding: 14px 12px; text-align: left; vertical-align: top; }
+.ev-table th { font-size: 12px; color: var(--text-tertiary, #888); font-weight: 600; padding: 10px 12px; white-space: nowrap; }
+.ev-table td { border-top: 1px solid rgba(0,0,0,.04); }
 .ev-table a { color: var(--accent, #e63946); text-decoration: none; word-break: break-all; }
 .ev-table a:hover { text-decoration: underline; }
-.ev-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.ev-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.4; white-space: nowrap; }
 .ev-pill.q { background: rgba(22,163,74,.14); color: #16a34a; }
 .ev-pill.u { background: rgba(120,120,120,.14); color: #666; }
 .ev-pill.pir-yes { background: rgba(230,57,70,.16); color: #e63946; }
 .ev-pill.pir-no { background: rgba(37,99,235,.14); color: #e07a00; }
 .ev-pill.pir-pend { background: rgba(255,107,0,.14); color: #ff6b00; }
+.ev-pill.pend { background: rgba(120,120,120,.14); color: #666; }
 .ev-empty { text-align: center; color: var(--text-tertiary, #999); padding: 30px 0; }
+
+/* === 歌曲/详情 cell：结构化 mini-card === */
+.ev-song { font-weight: 700; font-size: 14px; color: var(--text-primary, #111); margin-bottom: 8px; letter-spacing: -.01em; line-height: 1.35; }
+.ev-song-detail { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: rgba(0,0,0,.025); border-radius: 8px; border: 1px solid rgba(0,0,0,.05); }
+.ev-song-detail-row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; line-height: 1.4; }
+.ev-song-detail-label { color: var(--text-tertiary, #999); flex-shrink: 0; min-width: 56px; font-weight: 500; }
+.ev-song-detail-value { color: var(--text-secondary, #444); word-break: break-all; flex: 1; }
+
+/* === 互动 / 使用：参考搜索页「收藏/在听/评论」三行结构 === */
+.ev-metrics { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.ev-metric-row { display: flex; align-items: baseline; gap: 9px; font-variant-numeric: tabular-nums; line-height: 1.45; }
+.ev-metric-row .ev-metric-label { font-size: 11px; color: var(--text-tertiary, #999); min-width: 32px; opacity: .85; }
+.ev-metric-row .ev-metric-value { font-size: 13px; font-weight: 600; color: var(--text-secondary, #555); }
+.ev-metric-row.kind-primary .ev-metric-label { color: var(--text-secondary, #555); opacity: .9; font-weight: 500; }
+.ev-metric-row.kind-primary .ev-metric-value { color: var(--text-primary, #111); font-weight: 700; }
+.ev-metric-row.kind-primary .ev-metric-value.mag-huge { font-weight: 800; background: linear-gradient(135deg, #ff8a00, #ff5e3a); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; font-size: 14px; }
+.ev-metric-row.kind-primary .ev-metric-value.mag-large { color: var(--plat-accent, var(--text-primary, #111)); font-weight: 700; }
+.ev-metric-row.kind-primary .ev-metric-value.mag-mid { color: var(--text-primary, #111); font-weight: 700; }
+.ev-metric-row.kind-primary .ev-metric-value.mag-small { color: var(--text-secondary, #555); font-weight: 500; }
+.ev-metric-row .ev-metric-empty { color: var(--text-tertiary, #999); opacity: .55; font-weight: 400; }
+.ev-metrics-empty { font-size: 13px; color: var(--text-tertiary, #999); }
+
+/* ═══════════════ 自动跳转到新任务 视觉提示 ═══════════════ */
+@keyframes ev-flash-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(230,57,70,.55); background-color: rgba(230,57,70,.06); }
+  60%  { box-shadow: 0 0 0 12px rgba(230,57,70,0); background-color: rgba(230,57,70,.06); }
+  100% { box-shadow: 0 0 0 0 rgba(230,57,70,0); background-color: transparent; }
+}
+.ev-flash {
+  animation: ev-flash-pulse 1.5s ease-out 1;
+  border-radius: 10px;
+}
+
+@keyframes ev-jump-in {
+  from { opacity: 0; transform: translate(-50%, -16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes ev-jump-out {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to   { opacity: 0; transform: translate(-50%, -10px); }
+}
+.ev-jump-banner {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent, #e63946);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(230,57,70,.35);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+}
+.ev-jump-banner.show { animation: ev-jump-in .25s ease-out forwards; }
+.ev-jump-banner:not(.show) { animation: ev-jump-out .25s ease-in forwards; }
+
+/* === 命中依据 cell：分级结构 === */
+.ev-basis { display: flex; flex-direction: column; gap: 5px; }
+.ev-basis-main { font-size: 13px; font-weight: 600; color: var(--text-primary, #111); line-height: 1.45; }
+.ev-basis-sub { font-size: 12px; color: var(--text-secondary, #555); line-height: 1.4; }
+.ev-basis-meta { font-size: 11px; color: var(--text-tertiary, #888); padding-top: 4px; border-top: 1px dashed rgba(0,0,0,.08); margin-top: 2px; line-height: 1.4; }
+.ev-basis-meta b { color: var(--text-secondary, #555); font-weight: 600; }
+
+/* === 判定 / 审核 cell：紧凑 + 撤销 === */
+.ev-judge { display: flex; flex-direction: column; gap: 6px; }
+.ev-judge-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ev-judge-tag { font-size: 10px; color: var(--text-tertiary, #999); white-space: nowrap; min-width: 28px; }
+.ev-pill.claimed { background: rgba(234,88,12,.16); color: #ea580c; }
+.ev-undo { background: none; border: 1px dashed rgba(0,0,0,.18); color: var(--text-tertiary, #888); font-size: 11px; padding: 2px 8px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all .15s ease; }
+.ev-undo:hover { border-color: var(--accent, #e63946); color: var(--accent, #e63946); background: rgba(230,57,70,.04); }
+.ev-row-status { font-size: 12px; padding: 4px 8px; border-radius: 7px; border: 1px solid rgba(0,0,0,.12); background: var(--bg-input, #fff); color: var(--text-primary, #111); max-width: 110px; }
+
+/* === 同博主同歌聚合 === */
+.ev-agg { display: inline-block; font-size: 11px; color: #b45309; background: rgba(255,107,0,.10); padding: 2px 8px; border-radius: 6px; font-weight: 500; border: 1px solid rgba(255,107,0,.18); }
 
 .button { padding: 9px 16px; border-radius: 10px; border: 1px solid transparent; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s ease; }
 .button.primary { background: var(--accent, #e63946); color: #fff; }
@@ -109,3 +215,30 @@ body.ev-modal-open { overflow: hidden; }
 .ev-modal-cmd button { white-space: nowrap; align-self: flex-start; }
 .ev-modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--glass-border, rgba(0,0,0,.06)); }
 .ev-modal-status { font-size: 13px; color: var(--text-secondary, #555); flex: 1; }
+
+/* 顶部 3 张行动卡副标题 */
+.ev-stat-value.ok { color: #16a34a; }
+.ev-stat-sub { font-size: 11px; color: var(--text-tertiary, #999); margin-top: 3px; }
+
+/* 链接列：复制 / 打开 / 认领 */
+.ev-col-links { min-width: 150px; }
+.ev-link-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ev-link-id { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; color: var(--text-secondary, #555); word-break: break-all; }
+.ev-copy, .ev-claim { display: inline-block; margin-top: 5px; margin-right: 5px; padding: 3px 9px; font-size: 11px; font-weight: 600; border-radius: 7px; cursor: pointer; border: 1px solid var(--glass-border, rgba(0,0,0,.12)); background: var(--bg-input, #f6f7fa); color: var(--text-primary, #111); }
+.ev-copy:hover { border-color: var(--accent, #e63946); color: var(--accent, #e63946); }
+.ev-claim { background: #ea580c; color: #fff; border-color: #ea580c; }
+.ev-claim:hover { filter: brightness(1.08); }
+
+/* 判定 / 审核：系统判 + 你的判 合并列（结构化样式见上 .ev-judge / .ev-judge-row / .ev-judge-tag） */
+
+/* 同博主同歌聚合标签（结构化样式见上 .ev-agg） */
+
+/* 撤销 Toast 浮层 */
+.ev-toast-wrap { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 99999; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+.ev-toast { pointer-events: auto; display: flex; align-items: center; gap: 14px; background: #1f2430; color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.32); font-size: 14px; animation: ev-toast-in .25s ease; max-width: 92vw; }
+.ev-toast-msg { font-weight: 500; }
+.ev-toast-undo { background: rgba(255,255,255,.14); border: 0; color: #fff; font-weight: 700; padding: 7px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: background .15s ease; }
+.ev-toast-undo:hover { background: rgba(255,255,255,.26); }
+.ev-toast-close { background: none; border: 0; color: rgba(255,255,255,.55); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
+.ev-toast-close:hover { color: #fff; }
+@keyframes ev-toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }

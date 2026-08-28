@@ -10,7 +10,7 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.28.5'
+APP_VERSION        = '4.28.6'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
 APP_VERSION_NAME   = 'v4.28.5 证据监测·数据监控歌单一键导入授权曲库（含匹配器根因修复）'
 APP_VERSION_DATE   = '2026-08-24'
@@ -4196,6 +4196,62 @@ def _filter_qishui_playwright_results(items):
     return out
 
 
+# ── v4.28.0：Playwright 浏览器复用 + 并发限制 ──
+# 旧实现每次 _search_qishui_playwright 调用都 `with sync_playwright() as p` 新开一个 Chromium，
+# 在「多关键词并发搜索」场景下会同时拉起 N 个浏览器（每关键词一个 qishui 任务），Windows 上
+# 每个 Chromium 启动 + 联网都被 Defender 实时扫描，10 个并发叠加 → 数分钟级。
+# 改造：维护 2 个浏览器实例槽位（跨搜索请求复用，只付一次启动代价），用 2 把锁把 Playwright
+# 并发压到最多 2 路，保证线程安全（同一 browser 同一时刻仅一个线程操作）。context 每次
+# new_context 隔离 Cookie，browser 级不留存登录态，复用安全。
+_qishui_browsers = [None, None]
+_qishui_pws = [None, None]
+_qishui_locks = [threading.Lock(), threading.Lock()]
+_qishui_idle = [0.0, 0.0]
+
+
+def _qishui_pick_slot():
+    return threading.get_ident() % 2
+
+
+def _qishui_acquire(slot):
+    # 调用方须持有 _qishui_locks[slot]
+    global _qishui_browsers, _qishui_pws
+    b = _qishui_browsers[slot]
+    if b is None or not b.is_connected():
+        from playwright.sync_api import sync_playwright
+        pw = sync_playwright().start()
+        try:
+            b = pw.chromium.launch(headless=True, channel='chrome')
+        except Exception:
+            b = pw.chromium.launch(headless=True)
+        _qishui_browsers[slot] = b
+        _qishui_pws[slot] = pw
+    return b
+
+
+def _qishui_release_browser(slot):
+    # 调用方持有锁；仅更新空闲时间，浏览器保留以便复用
+    _qishui_idle[slot] = time.time()
+
+
+def _qishui_cleanup_idle():
+    """低频调用（每次搜索开始）：回收空闲超过 5 分钟的浏览器，避免长进程泄漏。"""
+    now = time.time()
+    for i in range(2):
+        with _qishui_locks[i]:
+            if _qishui_browsers[i] is not None and now - _qishui_idle[i] > 300:
+                try:
+                    _qishui_browsers[i].close()
+                except Exception:
+                    pass
+                try:
+                    _qishui_pws[i].stop()
+                except Exception:
+                    pass
+                _qishui_browsers[i] = None
+                _qishui_pws[i] = None
+
+
 def _search_qishui_playwright(keyword, max_results=30, cookie_str=''):
     """使用 Playwright（系统 Chrome）搜索汽水/抖音音乐。
 
@@ -4223,88 +4279,83 @@ def _search_qishui_playwright(keyword, max_results=30, cookie_str=''):
             except Exception:
                 pass
 
-    with sync_playwright() as p:
-        # 优先使用系统 Chrome，避免下载 Chromium
-        try:
-            browser = p.chromium.launch(headless=True, channel='chrome')
-        except Exception:
-            try:
-                browser = p.chromium.launch(headless=True)
-            except Exception as e:
-                print(f"[Qishui] Browser launch failed: {e}")
-                return []
-
+    slot = _qishui_pick_slot()
+    with _qishui_locks[slot]:
+        browser = _qishui_acquire(slot)
         context = browser.new_context(
             user_agent=COMMON_UA,
             viewport={'width': 1280, 'height': 900},
             locale='zh-CN',
         )
-
-        # 注入 Cookie
-        if cookie_str:
-            cookies = _parse_qishui_cookie(cookie_str)
-            if cookies:
-                try:
-                    context.add_cookies(cookies)
-                except Exception as e:
-                    print(f"[Qishui] Cookie injection warning: {e}")
-
-        page = context.new_page()
-        page.on('response', _on_response)
-        # 拦截不必要的资源加速加载
-        page.route('**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,mp4,webm,mp3}', lambda route: route.abort())
-
-        # 进入抖音音乐搜索页，触发前端签名请求
         try:
-            page.goto(f'https://www.douyin.com/search/{urllib.parse.quote(keyword)}?type=music',
-                      timeout=20000, wait_until='domcontentloaded')
-        except Exception as e:
-            print(f'[Qishui] navigate error: {e}')
+            # 注入 Cookie（context 级隔离，复用 browser 不串味）
+            if cookie_str:
+                cookies = _parse_qishui_cookie(cookie_str)
+                if cookies:
+                    try:
+                        context.add_cookies(cookies)
+                    except Exception as e:
+                        print(f"[Qishui] Cookie injection warning: {e}")
 
-        # 等待并解析被拦截的「带签名」响应
-        waited = 0
-        while waited < 12000 and 'payload' not in captured:
+            page = context.new_page()
+            page.on('response', _on_response)
+            # 拦截不必要的资源加速加载
+            page.route('**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,mp4,webm,mp3}', lambda route: route.abort())
+
+            # 进入抖音音乐搜索页，触发前端签名请求
             try:
-                page.wait_for_timeout(300)
+                page.goto(f'https://www.douyin.com/search/{urllib.parse.quote(keyword)}?type=music',
+                          timeout=20000, wait_until='domcontentloaded')
+            except Exception as e:
+                print(f'[Qishui] navigate error: {e}')
+
+            # 等待并解析被拦截的「带签名」响应
+            waited = 0
+            while waited < 12000 and 'payload' not in captured:
+                try:
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
+                waited += 300
+
+            data = None
+            if 'payload' in captured:
+                try:
+                    import json as _json
+                    data = _json.loads(captured['payload'])
+                except Exception as e:
+                    print(f'[Qishui] payload parse error: {e}')
+
+            if data is not None:
+                if _qishui_is_blocked(data):
+                    PLATFORM_WARNINGS['qishui'] = (
+                        '汽水音乐（抖音）在无头浏览器中登录态未生效：注入的 Cookie 被抖音判为未登录并弹出登录墙，'
+                        '因此搜索无法返回结果。这是抖音反爬/反自动化的技术限制，并非你的账号被风控。'
+                        '请改用「浏览器登录」并保持登录窗口不关闭，即可复用真实已登录会话直接搜索。'
+                    )
+                    return results
+                parsed = _parse_qishui_music_response(data, max_results, music_only=True)
+                if parsed:
+                    results = parsed
+
+            # 兜底：未捕获到签名响应时，用 DOM/SSR 提取（复用统一兜底函数）
+            if not results:
+                print('[Qishui] 未捕获签名响应，回退 DOM/SSR 提取')
+                results = _run_qishui_dom_fallback(page, keyword, max_results)
+
+            # 尽力而为：抓取详情页统计（使用/收藏/评论）
+            if results:
+                try:
+                    _scrape_qishui_detail_stats(context, results)
+                except Exception as e:
+                    print(f"[Qishui] detail scrape skip: {e}")
+        finally:
+            # 只关 context，保留 browser 给后续调用复用
+            try:
+                context.close()
             except Exception:
                 pass
-            waited += 300
-
-        data = None
-        if 'payload' in captured:
-            try:
-                import json as _json
-                data = _json.loads(captured['payload'])
-            except Exception as e:
-                print(f'[Qishui] payload parse error: {e}')
-
-        if data is not None:
-            if _qishui_is_blocked(data):
-                PLATFORM_WARNINGS['qishui'] = (
-                    '汽水音乐（抖音）在无头浏览器中登录态未生效：注入的 Cookie 被抖音判为未登录并弹出登录墙，'
-                    '因此搜索无法返回结果。这是抖音反爬/反自动化的技术限制，并非你的账号被风控。'
-                    '请改用「浏览器登录」并保持登录窗口不关闭，即可复用真实已登录会话直接搜索。'
-                )
-                browser.close()
-                return results
-            parsed = _parse_qishui_music_response(data, max_results, music_only=True)
-            if parsed:
-                results = parsed
-
-        # 兜底：未捕获到签名响应时，用 DOM/SSR 提取（复用统一兜底函数）
-        if not results:
-            print('[Qishui] 未捕获签名响应，回退 DOM/SSR 提取')
-            results = _run_qishui_dom_fallback(page, keyword, max_results)
-
-        # 尽力而为：抓取详情页统计（使用/收藏/评论）
-        if results:
-            try:
-                _scrape_qishui_detail_stats(context, results)
-            except Exception as e:
-                print(f"[Qishui] detail scrape skip: {e}")
-
-        browser.close()
-
+            _qishui_release_browser(slot)
     return results
 
 
@@ -4646,6 +4697,12 @@ def search_all(keyword, per_platform_limit=30, alt_keywords=None, platforms=None
             keywords.append(kw)
     if not keywords:
         return []
+
+    # 回收空闲浏览器（低频：每次搜索清一次），避免长进程泄漏
+    try:
+        _qishui_cleanup_idle()
+    except Exception:
+        pass
 
     _sp_start(progress_sid, keyword_count=len(keywords),
               platform_count=len(platforms) if platforms else len(PLATFORM_FUNCS))

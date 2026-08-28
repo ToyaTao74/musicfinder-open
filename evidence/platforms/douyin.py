@@ -1,14 +1,28 @@
 #!/usr/bin/env python3
-"""抖音抓取（需真人登录 + 浏览器自动化）
+"""抖音抓取（复用真实登录态 + 拦截前端签名接口）
 
-抖音风控强，必须登录态。流程：
-  1. 首次：login_flow() 打开浏览器，你手动扫码登录，状态存到
-     ~/.musicfinder/douyin_state.json。
-  2. 之后：search() 加载登录态，搜歌名/歌手，滚动采集视频（点赞/链接/上传者）。
-  3. 无登录态时返回 [{'needs_login': True}]，任务标 needs_login。
+照搬用户已安装的「音乐证据监测台」小程序的做法：抖音对 headless 自动化必弹滑块，
+手写 X-Bogus 签名又极脆弱，所以本模块走两条关键路径：
 
-依赖 patchright（playwright 反爬分支）。打包时已按主程序约定把它列为可选，
-未安装时本模块优雅降级，不拖垮其它平台。
+  1. 登录态 = profile 指纹 + 注入登录 cookie（双保险）：
+     - 复用「音乐证据监测台」的真实 Chrome profile（仅作稳定浏览器指纹）：
+       ~/Library/Application Support/音乐证据监测台/douyin-profile
+     - 真正让抖音识别为已登录用户的，是 ~/.musicfinder/douyin_state.json 里的
+       登录 cookie（sessionid_ss / sid_tt / sid_guard 等，有效至 2026-10-11）。
+       用 context.add_cookies() 注入 —— 这正是别人程序绕过滑块的核心。
+       （login_flow() 扫码流程仍能生成该 state 文件，作为兜底登录手段。）
+
+  2. 抓取：用 launch_persistent_context(headless=False) 打开该 profile 的真实 Chrome，
+     在 search 页上用 page.on('response') 拦截抖音前端「自动签名」的搜索接口
+     （aweme/v1/web/search/item/ 或 general/search/single），直接 json.loads(body)
+     拿 aweme_list，彻底绕开手写签名。DOM 选择器方案已弃用（被滑块挡住）。
+
+调用方式：
+  - 网页任务（run_task → run_platform('douyin')）会 headful 触发（LaunchAgent 在 GUI 会话内可弹窗）。
+  - 本地最稳路径：python -m evidence.platforms.douyin scan "歌名" "歌手"
+    复用同一 profile + cookie 抓取并直接落库到 ~/.musicfinder/evidence.db，网页照常展示。
+
+依赖 patchright（playwright 反爬分支），未安装时本模块优雅降级，不拖垮其它平台。
 """
 
 import json
@@ -19,6 +33,13 @@ from .. import db
 
 STATE_PATH = os.path.join(db.DATA_DIR, 'douyin_state.json')
 
+# 别人程序（「音乐证据监测台」）的真实登录态 Chrome profile：抖音识别为已登录真实
+# 用户、不发滑块。抖音对 headless 自动化必发滑块，故抖音抓取须复用此 profile + headful。
+COMMON_UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
+             '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36')
+DOUYIN_PROFILE = os.path.expanduser(
+    '~/Library/Application Support/音乐证据监测台/douyin-profile')
+
 
 def _load_state():
     if os.path.exists(STATE_PATH):
@@ -27,6 +48,25 @@ def _load_state():
         except Exception:
             return None
     return None
+
+
+def _load_cookies():
+    """从 douyin_state.json（playwright storage_state 格式）取登录 cookie。
+
+    这些 cookie 含 sessionid_ss/sid_tt 等真实登录态，有效至 2026-10-11。
+    是「照搬别人程序」的关键：profile 只提供浏览器指纹，真正登录靠注入这些 cookie。
+    过滤掉缺 name/value/domain 的脏条目（storage_state 偶尔含空 name）。
+    """
+    state = _load_state()
+    if not state:
+        return []
+    raw = state.get('cookies', []) or []
+    out = []
+    for c in raw:
+        if not c.get('name') or not c.get('value') or not c.get('domain'):
+            continue
+        out.append(c)
+    return out
 
 
 def _is_logged_in(page):
@@ -85,73 +125,191 @@ def _parse_count(text):
         return 0
 
 
+def _parse_aweme_bodies(bodies, song_name, monitor_artist, target_count=300):
+    """把若干次被拦截的签名接口响应体合并解析成候选视频列表。
+
+    抖音搜索接口返回结构有两代：
+      - 旧：{status_code, aweme_list:[...]}
+      - 新：{status_code, data:[{aweme_info:{...}, aweme_list:[...], ...}, ...]}
+    这里两种都兼容。按 aweme_id 去重。
+    """
+    import time
+    seen = set()
+    out = []
+    for body in bodies:
+        try:
+            data = json.loads(body)
+        except Exception:
+            continue
+        if data.get('status_code') not in (0, None):
+            # 登录墙 / 风控码：跳过（会触发上层降级提示）
+            continue
+        awemes = []
+        d = data.get('data')
+        if isinstance(d, list):              # 新版：data 是卡片列表
+            for card in d:
+                if not isinstance(card, dict):
+                    continue
+                a = card.get('aweme_info') or (card.get('aweme_list') or [None])[0]
+                if isinstance(a, dict) and a.get('aweme_id'):
+                    awemes.append(a)
+        elif isinstance(d, dict):            # 部分结构 data 里再嵌 aweme_list
+            awemes = d.get('aweme_list') or []
+        if not awemes:                      # 旧版兜底
+            awemes = data.get('aweme_list') or []
+        for a in awemes:
+            aid = a.get('aweme_id') or a.get('aweme_id_str')
+            if not aid or aid in seen:
+                continue
+            seen.add(aid)
+            if len(out) >= target_count:
+                break
+            author = a.get('author') or {}
+            uploader = (author.get('nickname') or '').strip()
+            stats = a.get('statistics') or {}
+            likes = _safe_int(stats.get('digg_count'))
+            comments = _safe_int(stats.get('comment_count'))
+            shares = _safe_int(stats.get('share_count'))
+            plays = _safe_int(stats.get('play_count'))
+            collects = _safe_int(stats.get('collect_count') or stats.get('collect_cnt'))
+            music = a.get('music') or {}
+            music_title = (music.get('title') or '').strip()
+            original_author = (music.get('author') or '').strip()
+            ct = a.get('create_time') or 0
+            uploaded_at = ''
+            if ct:
+                try:
+                    uploaded_at = time.strftime('%Y-%m-%d', time.localtime(int(ct)))
+                except Exception:
+                    pass
+            video_url = a.get('share_url') or f'https://www.douyin.com/video/{aid}'
+            soda_mid = music.get('id') or music.get('mid')
+            soda_link = (f'https://music.douyin.com/qishui/share/track?track_id={soda_mid}'
+                         if soda_mid else '')
+            out.append({
+                'song_name': song_name,
+                'artist': monitor_artist,
+                'version': '',
+                'official_url': video_url,
+                'video_url': video_url,
+                'soda_link': soda_link,
+                'interactions': {'likes': likes, 'collect': collects, 'comments': comments,
+                                 'shares': shares, 'plays': plays},
+                'match_basis': '抖音搜索相关视频',
+                # v2.3.2 三分类：监测歌手 / 原声账号 / 视频博主 分开
+                'monitor_artist': monitor_artist,
+                'original_author': original_author,
+                'video_blogger': uploader,
+                'uploaded_at': uploaded_at,
+                'extra': {'source': 'douyin-profile-intercept',
+                          'music_title': music_title},
+            })
+    return out
+
+
+def _safe_int(v):
+    if v is None:
+        return 0
+    try:
+        if isinstance(v, str):
+            s = v.strip().replace('+', '').replace(',', '')
+            if not s:
+                return 0
+            if '亿' in s:
+                return int(float(s.replace('亿', '')) * 100000000)
+            if '万' in s:
+                return int(float(s.replace('万', '')) * 10000)
+            return int(float(s))
+        return int(float(v))
+    except Exception:
+        return 0
+
+
 @register('douyin')
 def search(song_name, artist='', version='', target_count=300,
            source='chrome', recheck=False, headless=False, **_):
-    state = _load_state()
-    if not state:
-        return [{'needs_login': True}]
+    """抖音搜索视频（复用真实登录态 profile + 注入登录 cookie + 拦截前端签名接口）。
+
+    返回候选列表；无登录 cookie 时返回 [{'needs_login': True}]；异常返回 [{'error': ...}]。
+    headless=False 时弹真实 Chrome 窗口（配合已注入 cookie，抖音不弹滑块）；
+    headless=True 抖音可能仍弹滑块，故 GUI 会话内（网页任务 / 本地 scan）走 headful。
+    """
+    monitor_artist = (artist or '').strip()
+    query = f'{song_name} {artist}'.strip()
+
+    cookies = _load_cookies()
+    if not cookies:
+        return [{'needs_login': True,
+                 'message': '未找到抖音登录态（~/.musicfinder/douyin_state.json 无 cookie），请先登录'}]
 
     try:
         from patchright.sync_api import sync_playwright
     except Exception:
         return [{'error': '未安装 patchright'}]
 
-    # v2.2.0：抖音搜索词自动加入"歌曲"，减少无关视频
-    query = f'{song_name} {artist} 歌曲'.strip()
-    monitor_artist = (artist or '').strip()  # 监测歌手（我们的目标歌手）
+    captured_bodies = []
+
+    def _on_response(response):
+        url = response.url
+        if 'aweme/v1/web/search/item/' in url or 'general/search/single' in url:
+            try:
+                body = response.body()
+                if body:
+                    captured_bodies.append(body)
+            except Exception:
+                pass
+
     candidates = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=headless, channel='chrome')
-            ctx = browser.new_context(storage_state=STATE_PATH)
+            ctx = p.chromium.launch_persistent_context(
+                user_data_dir=DOUYIN_PROFILE,
+                headless=headless,
+                channel='chrome',
+                user_agent=COMMON_UA,
+                viewport={'width': 1280, 'height': 900},
+                locale='zh-CN',
+                args=['--disable-blink-features=AutomationControlled'],
+            )
+            # 关键：注入真实登录 cookie（sessionid_ss 等），让抖音识别为已登录用户
+            try:
+                ctx.add_cookies(cookies)
+            except Exception as e:
+                print(f'[抖音] 注入 cookie 失败（继续尝试）: {e}')
             page = ctx.new_page()
-            page.goto('https://www.douyin.com/search/' + _urlencode(query),
-                      wait_until='domcontentloaded')
-            # 滚动采集（抖音为无限流）
-            collected = 0
-            scrolls = 0
-            while collected < target_count and scrolls < 60:
+            page.on('response', _on_response)
+            # 拦截图片/音视频/字体，加速加载（不拦截 JSON 接口）
+            page.route('**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,mp4,webm,mp3}',
+                       lambda route: route.abort())
+            try:
+                page.goto('https://www.douyin.com/search/' + _urlencode(query),
+                          wait_until='domcontentloaded', timeout=30000)
+            except Exception as e:
+                print(f'[抖音] 导航异常（继续尝试拦截响应）: {e}')
+
+            # 等首屏签名响应
+            waited = 0
+            while waited < 15000 and not captured_bodies:
+                page.wait_for_timeout(300)
+                waited += 300
+
+            # 滚动触发更多分页，累计拦截响应
+            pages = min(40, (target_count // 5) + 5)
+            for _ in range(pages):
                 page.mouse.wheel(0, 3000)
                 page.wait_for_timeout(1200)
-                scrolls += 1
-                items = page.query_selector_all('li[data-e2e="search-video-card"]')
-                for it in items:
-                    if collected >= target_count:
-                        break
-                    try:
-                        a = it.query_selector('a')
-                        href = a.get_attribute('href') if a else ''
-                        link = 'https://www.douyin.com' + href if href and href.startswith('/') else (href or '')
-                        like_el = it.query_selector('[data-e2e="like-count"]')
-                        like_txt = like_el.inner_text() if like_el else ''
-                        up_el = it.query_selector('[data-e2e="video-author"]')
-                        video_blogger = up_el.inner_text() if up_el else ''  # 视频博主（上传者）
-                        soda_el = it.query_selector('a[data-e2e="music-name"]')
-                        soda_link = soda_el.get_attribute('href') if soda_el else ''
-                        soda_link = ('https://www.qishui.com' + soda_link) if soda_link and soda_link.startswith('/') else (soda_link or '')
-                        # 原声账号：从汽水音乐链接推断作者昵称（music-name 文本）
-                        original_author = soda_el.inner_text().strip() if soda_el else ''
-                        candidates.append({
-                            'song_name': song_name, 'artist': monitor_artist, 'version': '',
-                            'official_url': link, 'video_url': link,
-                            'soda_link': soda_link,
-                            'interactions': {'likes': _parse_count(like_txt),
-                                            'uploaded_at': ''},
-                            'match_basis': '抖音搜索相关视频',
-                            # v2.3.2 三分类：监测歌手 / 原声账号 / 视频博主 分开
-                            'monitor_artist': monitor_artist,
-                            'original_author': original_author,
-                            'video_blogger': video_blogger,
-                            'uploaded_at': '',
-                            'extra': {'source': source},
-                        })
-                        collected += 1
-                    except Exception:
-                        continue
-            browser.close()
+
+            candidates = _parse_aweme_bodies(
+                captured_bodies, song_name, monitor_artist, target_count)
+            ctx.close()
     except Exception as e:
+        msg = str(e)
+        if 'user data directory' in msg.lower() or 'already in use' in msg.lower():
+            return [{'error': '抖音 profile 被其它 Chrome 占用（请先关闭「音乐证据监测台」或正在运行的抖音抓取）'}]
         return [{'error': f'抖音抓取失败: {e}'}]
+
+    if not candidates:
+        return [{'error': '抖音未返回结果（可能登录态失效，或需手动完成滑块验证）'}]
     return candidates
 
 
@@ -253,5 +411,33 @@ if __name__ == '__main__':
         else:
             print('[抖音] 登录未完成，请重试。')
             sys.exit(1)
+    elif cmd == 'scan':
+        # 本地最稳路径：复用「音乐证据监测台」真实登录态 profile，headful 抓取并落库。
+        # 用法：python -m evidence.platforms.douyin scan "歌名" ["歌手"] [数量]
+        if len(sys.argv) < 3:
+            print('usage: python -m evidence.platforms.douyin scan "歌名" ["歌手"] [数量]')
+            sys.exit(1)
+        sname = sys.argv[2]
+        art = sys.argv[3] if len(sys.argv) > 3 else ''
+        try:
+            target = int(sys.argv[4]) if len(sys.argv) > 4 else 50
+        except ValueError:
+            target = 50
+        from .. import db, engine
+        db.init_db()
+        tid = db.create_task(sname, artist=art, version='', platforms=['douyin'])
+        print(f'[抖音] 已建任务 #{tid}，启动 headful Chrome（复用真实登录态 profile）...')
+        print(f'[抖音] 搜索词：{sname} {art}　目标 {target} 条')
+        engine.run_task(tid, sname, artist=art, version='', platforms=['douyin'],
+                        opts={'headless': False, 'target_count': target,
+                              'source': 'douyin-profile'})
+        t = db.get_task(tid) or {}
+        evs = db.list_evidence(task_id=tid, platform='douyin')
+        print(f'[抖音] 任务 #{tid} 完成：状态={t.get("status")}，发现 {len(evs)} 条抖音证据')
+        for e in evs[:15]:
+            inter = e.get('interactions') or {}
+            likes = inter.get('likes', 0) if isinstance(inter, dict) else 0
+            print(f'   - {e.get("uploaded_at","")} | {e.get("uploader","")} | 赞{likes} | {e.get("video_url","")}')
+        print('[抖音] 结果已写入 ~/.musicfinder/evidence.db，网页刷新即可查看。')
     else:
-        print('usage: python -m evidence.platforms.douyin login')
+        print('usage: python -m evidence.platforms.douyin [login|scan]')

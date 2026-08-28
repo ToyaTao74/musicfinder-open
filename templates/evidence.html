@@ -70,17 +70,24 @@
           <select id="evPlatformFilter"><option value="all">全部平台</option><option value="netease">网易云</option><option value="qishui">汽水</option><option value="douyin">抖音</option></select>
           <select id="evThresholdFilter"><option value="all">全部阈值</option><option value="qualified">已达阈值</option><option value="unqualified">未达阈值</option></select>
           <select id="evPiracyFilter"><option value="all">全部盗版</option><option value="是">盗版</option><option value="否">授权版</option><option value="待复核">待复核</option></select>
-          <select id="evReviewFilter"><option value="all">全部审核</option><option value="待复核">待复核</option><option value="已确认">已确认</option><option value="已忽略">已忽略</option></select>
-          <button class="button secondary" id="evBatchConfirm" disabled>确认所选</button>
-          <button class="button secondary" id="evBatchIgnore" disabled>忽略所选</button>
+          <select id="evReviewFilter"><option value="all">全部审核</option><option value="待复核">待复核</option><option value="已确认">已确认</option><option value="已认领">已认领</option><option value="已忽略">已忽略</option></select>
+          <select id="evTimeFilter" title="按抓取时间筛选"><option value="all">全部时间</option><option value="week">本周抓取</option><option value="month">本月抓取</option></select>
+          <select id="evPubFilter" title="按视频发布时间筛选"><option value="all">全部发布</option><option value="week">近7天发布</option><option value="month">近30天发布</option></select>
+          <select id="evSort" title="排序方式"><option value="crawl_desc">排序：抓取时间</option><option value="pub_desc">发布时间（新→旧）</option><option value="engage_desc">互动量（高→低）</option><option value="priority">优先级分（新+热）</option><option value="pending_first">待我处理优先</option></select>
+          <span class="ev-batch-sep"></span>
+          <button class="button" id="evBatchPirate" disabled title="标记为盗版：review=已确认，piracy=是" style="background:#dc2626;color:#fff;border-color:#dc2626">标记盗版</button>
+          <button class="button" id="evBatchClaim" disabled title="已发起认领：review=已认领" style="background:#ea580c;color:#fff;border-color:#ea580c">已认领</button>
+          <button class="button" id="evBatchOfficial" disabled title="确认正版：review=已确认，piracy=否" style="background:#16a34a;color:#fff;border-color:#16a34a">确认正版</button>
+          <button class="button secondary" id="evBatchIgnore" disabled title="忽略：review=已忽略（不看）">忽略</button>
+          <button class="button secondary" id="evCopyLinks" disabled title="复制选中行的抖音视频+汽水链接到剪贴板">复制选中链接</button>
         </div>
 
         <div class="ev-table-wrap">
           <table class="ev-table">
             <thead><tr>
               <th><input type="checkbox" id="evSelectAll"></th>
-              <th>歌曲 / 详情</th><th>平台</th><th>链接</th>
-              <th>互动</th><th>命中依据</th><th>盗版</th><th>审核</th>
+              <th>歌曲 / 详情</th><th>平台</th><th>官方链接（抖音视频）</th><th>视频挂链（汽水）</th>
+              <th>互动 / 使用</th><th>命中依据</th><th>判定 / 审核</th>
             </tr></thead>
             <tbody id="evRows"></tbody>
           </table>

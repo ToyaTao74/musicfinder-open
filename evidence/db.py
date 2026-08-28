@@ -21,7 +21,7 @@ import sqlite3
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ═══════════════════════════════════════════════════
 #  路径与常量
@@ -33,7 +33,10 @@ DB_PATH = os.path.join(DATA_DIR, 'evidence.db')
 SCHEMA_VERSION = 1
 
 # 复核状态
-REVIEW_PENDING, REVIEW_CONFIRMED, REVIEW_IGNORED = '待复核', '已确认', '已忽略'
+REVIEW_PENDING, REVIEW_CONFIRMED, REVIEW_IGNORED, REVIEW_CLAIMED = '待复核', '已确认', '已忽略', '已认领'
+# 批量复核时可用的 status 取值（前端批量按钮映射到这些字符串）
+#   新增 '待复核' 用于"撤销判断"：把 review_status 重置回待复核，同时把 piracy_status 也回到 '待复核'
+REVIEW_STATUS_OPTIONS = (REVIEW_PENDING, REVIEW_CONFIRMED, REVIEW_IGNORED, REVIEW_CLAIMED, '盗版', '确认正版')
 # 盗版状态
 PIRACY_PENDING, PIRACY_YES, PIRACY_NO = '待复核', '是', '否'
 # 任务状态
@@ -330,21 +333,48 @@ def add_evidence(task_id, platform, song_name='', artist='', version='',
 
 
 def set_review(evidence_ids, review_status):
-    """批量人工复核：确认/忽略。确认时按当前 piracy_status 落库（盗版/授权版）。"""
+    """批量人工复核。
+
+    review_status 取值（前端 4 个批量按钮对应）：
+      - '已确认'    → review_status=已确认（保留原 piracy_status）
+      - '已忽略'    → review_status=已忽略（不看）
+      - '已认领'    → review_status=已认领（已向平台发起认领/投诉）
+      - '盗版'      → review_status=已确认 + piracy_status=是（一键标盗版）
+      - '确认正版'  → review_status=已确认 + piracy_status=否（一键标正版）
+    """
     ids = [int(i) for i in evidence_ids if str(i).strip()]
     if not ids:
         return 0
+    if review_status not in REVIEW_STATUS_OPTIONS:
+        raise ValueError(f'unknown review_status: {review_status!r}')
     placeholders = ','.join('?' * len(ids))
     with tx() as conn:
-        if review_status == REVIEW_CONFIRMED:
-            # 确认：保留人工看过的盗版判定（是→盗版，否→授权版，待复核→保留待复核）
+        if review_status == '盗版':
+            conn.execute(
+                f'UPDATE evidence SET review_status=?, piracy_status=?, updated_at=? '
+                f'WHERE id IN ({placeholders})',
+                [REVIEW_CONFIRMED, PIRACY_YES, now_str()] + ids)
+        elif review_status == '确认正版':
+            conn.execute(
+                f'UPDATE evidence SET review_status=?, piracy_status=?, updated_at=? '
+                f'WHERE id IN ({placeholders})',
+                [REVIEW_CONFIRMED, PIRACY_NO, now_str()] + ids)
+        elif review_status == REVIEW_CLAIMED:
             conn.execute(
                 f'UPDATE evidence SET review_status=?, updated_at=? '
-                f'WHERE id IN ({placeholders})', [REVIEW_CONFIRMED, now_str()] + ids)
-        else:
+                f'WHERE id IN ({placeholders})',
+                [REVIEW_CLAIMED, now_str()] + ids)
+        elif review_status == REVIEW_PENDING:
+            # 撤销判断：review_status 与 piracy_status 一起回到待复核，原判定作废
+            conn.execute(
+                f'UPDATE evidence SET review_status=?, piracy_status=?, updated_at=? '
+                f'WHERE id IN ({placeholders})',
+                [REVIEW_PENDING, PIRACY_PENDING, now_str()] + ids)
+        else:  # REVIEW_CONFIRMED / REVIEW_IGNORED：仅改 review_status，保留 piracy_status
             conn.execute(
                 f'UPDATE evidence SET review_status=?, updated_at=? '
-                f'WHERE id IN ({placeholders})', [review_status, now_str()] + ids)
+                f'WHERE id IN ({placeholders})',
+                [review_status, now_str()] + ids)
         return conn.execute(
             f'SELECT COUNT(*) c FROM evidence WHERE id IN ({placeholders})', ids).fetchone()['c']
 
@@ -365,7 +395,7 @@ def list_tasks(limit=50):
 
 
 def list_evidence(task_id=None, platform='all', threshold='all',
-                  piracy='all', review='all'):
+                  piracy='all', review='all', time_range='all', pub_range='all'):
     where, args = ['1=1'], []
     if task_id:
         where.append('task_id=?')
@@ -383,6 +413,18 @@ def list_evidence(task_id=None, platform='all', threshold='all',
     if review != 'all':
         where.append('review_status=?')
         args.append(review)
+    # 抓取时间筛选：created_at 为 'YYYY-MM-DD HH:MM:SS' 字符串，按字典序比较即可
+    if time_range in ('week', 'month'):
+        days = 7 if time_range == 'week' else 30
+        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+        where.append('created_at >= ?')
+        args.append(cutoff)
+    # 发布时间筛选：uploaded_at 为 'YYYY-MM-DD' 字符串，按字典序比较即可
+    if pub_range in ('week', 'month'):
+        days = 7 if pub_range == 'week' else 30
+        cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        where.append('uploaded_at >= ? AND uploaded_at != ""')
+        args.append(cutoff)
     w = ' AND '.join(where)
     rows = get_conn().execute(
         f'SELECT * FROM evidence WHERE {w} ORDER BY qualified DESC, id DESC', args).fetchall()
@@ -393,12 +435,20 @@ def list_evidence(task_id=None, platform='all', threshold='all',
             d['interactions'] = json.loads(d['interactions']) if d['interactions'] else {}
         except Exception:
             d['interactions'] = {}
+        # 把 extra 里的三分类（监测歌手/原声账号/视频博主）提升到行级，方便前端直接展示
+        try:
+            ex = json.loads(d['extra']) if d['extra'] else {}
+        except Exception:
+            ex = {}
+        d['original_author'] = ex.get('original_author', '') or ''
+        d['monitor_artist'] = ex.get('monitor_artist', '') or ''
+        d['video_blogger'] = ex.get('video_blogger', '') or ''
         out.append(d)
     return out
 
 
-def dashboard(task_id=None):
-    ev = list_evidence(task_id=task_id)
+def dashboard(task_id=None, time_range='all'):
+    ev = list_evidence(task_id=task_id, time_range=time_range)
     total = len(ev)
     qualified = sum(1 for e in ev if e['qualified'])
     piracy_pending = sum(1 for e in ev if e['piracy_status'] == PIRACY_PENDING)
@@ -437,6 +487,7 @@ def stats():
         'qualified_total': one('SELECT COUNT(*) FROM evidence WHERE qualified=1'),
         'review_pending': one("SELECT COUNT(*) FROM evidence WHERE review_status='待复核'"),
         'piracy_yes': one("SELECT COUNT(*) FROM evidence WHERE piracy_status='是'"),
+        'review_claimed': one("SELECT COUNT(*) FROM evidence WHERE review_status='已认领'"),
         'schema_version': get_meta('schema_version', '0'),
     }
     return out

@@ -240,7 +240,8 @@ def api_dashboard():
     db.init_db()
     task_id = request.args.get('task_id')
     task_id = int(task_id) if task_id and task_id.isdigit() else None
-    d = db.dashboard(task_id)
+    time_range = request.args.get('time_range', 'all')
+    d = db.dashboard(task_id, time_range=time_range)
     return jsonify({'ok': True, 'data': d})
 
 
@@ -255,8 +256,11 @@ def api_review():
     status = body.get('status')
     if not ids:
         return jsonify({'ok': False, 'error': '未选择证据'}), 400
-    if status not in (db.REVIEW_CONFIRMED, db.REVIEW_IGNORED):
-        return jsonify({'ok': False, 'error': 'status 只能是 已确认/已忽略'}), 400
+    if status not in db.REVIEW_STATUS_OPTIONS:
+        return jsonify({
+            'ok': False,
+            'error': f'status 必须是 {" / ".join(db.REVIEW_STATUS_OPTIONS)} 之一'
+        }), 400
     n = db.set_review(ids, status)
     return jsonify({'ok': True, 'data': {'updated': n}})
 
@@ -344,35 +348,59 @@ def api_douyin_parse_link():
 
 @bp.route('/export.xlsx', methods=['GET'])
 def api_export():
+    """导出「维权清单」：与页面筛选联动（任务/平台/阈值/盗版/审核/时间）。
+
+    列：歌名、歌手、平台、抖音视频链接、汽水音频链接、互动量、命中依据、抓取时间、状态
+    """
     db.init_db()
     task_id = request.args.get('task_id')
     task_id = int(task_id) if task_id and task_id.isdigit() else None
+    platform = request.args.get('platform', 'all')
+    threshold = request.args.get('threshold', 'all')
+    piracy = request.args.get('piracy', 'all')
     review = request.args.get('review_status', 'all')
-    qualified_only = request.args.get('qualified_only') == '1'
-    ev = db.list_evidence(task_id=task_id, review=review)
-    if qualified_only:
-        ev = [e for e in ev if e['qualified']]
+    time_range = request.args.get('time_range', 'all')
+    pub_range = request.args.get('pub_range', 'all')
+    ev = db.list_evidence(task_id=task_id, platform=platform, threshold=threshold,
+                          piracy=piracy, review=review, time_range=time_range, pub_range=pub_range)
+
+    def inter_summary(e):
+        it = e.get('interactions') or {}
+        parts = []
+        if e['platform'] == 'douyin':
+            for k, zh in (('likes', '赞'), ('collect', '藏'), ('comments', '评'),
+                          ('shares', '分享'), ('plays', '使用')):
+                if it.get(k) not in (None, '', 0):
+                    parts.append(f'{zh}{it[k]}')
+        else:
+            for k, zh in (('favorites', '收藏'), ('comments', '评'),
+                          ('plays', '播放'), ('shares', '分享')):
+                if it.get(k) not in (None, '', 0):
+                    parts.append(f'{zh}{it[k]}')
+        return ' / '.join(parts)
 
     from openpyxl import Workbook
     wb = Workbook()
     ws = wb.active
-    ws.title = '音乐证据'
-    headers = ['歌曲', '歌手', '版本', '平台', '官方链接', '视频/作品链接',
-               '汽水挂链', '互动数据', '命中依据', '是否盗版', '审核状态', '上传者']
+    ws.title = '维权清单'
+    headers = ['歌名', '歌手', '平台', '抖音视频链接', '汽水音频链接',
+               '互动量', '命中依据', '抓取时间', '状态']
     ws.append(headers)
     for e in ev:
-        inter = e.get('interactions') or {}
-        inter_s = ' / '.join(f'{k}={v}' for k, v in inter.items() if v not in (None, ''))
         ws.append([
-            e['song_name'], e['artist'], e['version'],
+            e['song_name'], e['artist'],
             detect.PLATFORM_NAMES.get(e['platform'], e['platform']),
-            e['official_url'], e['video_url'], e['soda_link'], inter_s,
-            e['match_basis'], e['piracy_status'], e['review_status'], e['uploader'],
+            e['video_url'] or e['official_url'],
+            e['soda_link'],
+            inter_summary(e),
+            e['match_basis'],
+            e['created_at'] or '',
+            e['review_status'],
         ])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f'evidence_task{task_id}.xlsx' if task_id else 'evidence_all.xlsx'
+    fname = f'维权清单_task{task_id}.xlsx' if task_id else '维权清单_全部.xlsx'
     return send_file(buf, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                      as_attachment=True, download_name=fname)
 
