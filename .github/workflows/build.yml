@@ -227,7 +227,10 @@ jobs:
           COS_BUCKET: ${{ secrets.COS_BUCKET }}
           COS_REGION: ${{ secrets.COS_REGION }}
         run: |
-          curl -L -o coscli "https://github.com/Tencent/coscli/releases/latest/download/coscli-linux-amd64"
+          # 腾讯云已将 coscli 仓库由 Tencent/coscli 改名为 tencentyun/coscli，旧 URL 404。
+          # 改用腾讯云国内镜像下载（CI 环境更稳更快），校验：coscli-linux-amd64 SHA256=7165f2ae16c5f7ac495864c963ca574a76e04ec72680d7bc8a8eee3234d8cf91
+          curl -L -o coscli "https://cosbrowser.cloud.tencent.com/software/coscli/coscli-linux-amd64"
+          echo "downloaded coscli: $(file coscli 2>/dev/null || echo 'n/a')"
           chmod +x coscli
           # 用 printf 生成配置，避免 heredoc 在 YAML 缩进下无法终止的问题
           printf 'cos:\n  base:\n    secretid: %s\n    secretkey: %s\n    sessiontoken: ""\n  buckets:\n  - name: %s\n    region: %s\n    alias: mf\n' \
