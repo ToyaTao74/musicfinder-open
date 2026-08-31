@@ -61,16 +61,23 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# ── v4.29：Windows 由 one-file 改为 one-dir（产出 dist/MusicFinder/ 目录）──
+# 为什么改：one-file 每次启动都要把整个 bundle（含几百 MB 的 Chromium）解压到
+# %TEMP%\_MEIxxxx 随机临时目录，这个解压过程会被 Windows Defender 实时逐文件扫描，
+# 是「Windows 搜索比 Mac 慢一个数量级」的主要元凶之一。改成 one-dir 后文件固定躺在
+# 安装目录、只读一次不重解压，且排除目录变成固定路径（安装时一次性加好即可）。
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
+    [],                     # one-dir：二进制与数据不塞进 exe，改由下方 COLLECT 收集
+    exclude_binaries=True,
     name='MusicFinder',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # upx=False（原为 True）：UPX 加壳的二进制启动时需先解压到内存，且更容易触发
+    # 杀软启发式误报与扫描。本版目标就是提速，故关闭压缩，让文件被直接加载。
+    upx=False,
     runtime_tmpdir=None,
     # console=False: 双击 .exe 不弹黑色命令行窗口（纯后台本地 server + 自动开浏览器）
     # 若需查看运行日志，把下面改成 console=True 重新打包
@@ -90,4 +97,27 @@ exe = EXE(
         'product_name': 'MusicFinder',
         'product_version': APP_VERSION,
     },
+)
+
+# PyInstaller ≥ 6.0 的 one-dir 默认把依赖与数据放进 `_internal/` 子目录，会导致
+# app.py 里「资源在 exe 同目录」的假设失效（templates / playwright_browsers 找不到）。
+# 这里显式指定 contents_directory='.' 平铺到 exe 同目录，保持资源定位简单可靠；
+# 同时按版本条件传参，兼容 PyInstaller 5.x（该版本无此参数）。
+try:
+    import PyInstaller as _PI
+    _PI_VER = tuple(int(_x) for _x in str(getattr(_PI, '__version__', '0')).split('.')[:2] if _x.isdigit())
+except Exception:
+    _PI_VER = (0, 0)
+_collect_kwargs = {'contents_directory': '.'} if _PI_VER >= (6, 0) else {}
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='MusicFinder',
+    **_collect_kwargs,
 )

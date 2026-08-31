@@ -66,7 +66,10 @@ jobs:
           print('build secrets: cloudbase_set=%s discogs_set=%s' % (bool(tok), bool(dc)))
           PY
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller（one-dir：产出 dist/MusicFinder/ 目录）
+        # v4.29 起 Windows 由 one-file 改 one-dir：不再每次启动把几百 MB（含 Chromium）
+        # 解压到 %TEMP%\_MEI 随机临时目录被 Defender 实时扫描；配合安装器预置的
+        # Defender 排除，用户装完即用、无需任何手动配置即可获得提速效果。
         run: python -m PyInstaller musicfinder_win.spec --noconfirm
 
       - name: Read APP_VERSION from app.py
@@ -74,16 +77,46 @@ jobs:
         shell: bash
         run: echo "v=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")" >> "$GITHUB_OUTPUT"
 
-      - name: 重命名为带版本号的安装包（团队下载到本地一看就知版本）
-        shell: bash
-        run: mv "dist/MusicFinder.exe" "dist/MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe"
+      - name: 编译 Windows 安装器（安装时自动把安装目录加入 Defender 排除）
+        # 安装器是分发给团队的主产物：双击安装 → 仅弹一次 UAC → 自动加 Defender 排除，
+        # 之后永久提速、无需用户执行任何命令。NSIS 缺失时现场安装。
+        shell: pwsh
+        run: |
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (-not (Test-Path $makensis)) {
+            $cmd = Get-Command makensis -ErrorAction SilentlyContinue
+            if ($cmd) { $makensis = $cmd.Source }
+          }
+          if (-not $makensis -or -not (Test-Path $makensis)) {
+            Write-Host "未发现 NSIS，开始安装…"
+            choco install nsis -y
+            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          }
+          if (-not (Test-Path $makensis)) { Write-Error "makensis 不可用：无法生成 Windows 安装器" }
+          & $makensis /VERSION
+          & $makensis /DAPP_VERSION="${{ steps.v.outputs.v }}" installer_windows.nsi
 
-      - name: Upload Windows artifact
+      # 免安装压缩包：安装器万一出问题时团队仍有可用产物（需自行加 Defender 排除）
+      - name: 额外产出免安装压缩包（兜底，失败不阻塞）
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          7z a -tzip "dist\MusicFinder-v${{ steps.v.outputs.v }}-Windows-Portable.zip" ".\dist\MusicFinder\*"
+
+      - name: Upload Windows artifact（安装器，主产物）
         uses: actions/upload-artifact@v4
         with:
           name: MF-${{ steps.v.outputs.v }}-Windows
-          path: dist/MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe
+          path: dist/MusicFinder-v${{ steps.v.outputs.v }}-Windows-Setup.exe
           # 公开仓库 Actions 存储无配额限制，保留 90 天给用户充足下载窗口
+          retention-days: 90
+
+      - name: Upload Windows artifact（免安装版，兜底）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MF-${{ steps.v.outputs.v }}-Windows-Portable
+          path: dist/MusicFinder-v${{ steps.v.outputs.v }}-Windows-Portable.zip
           retention-days: 90
 
   macos:
@@ -188,12 +221,15 @@ jobs:
           body: |
             ## MusicFinder v${{ steps.v.outputs.v }} 自动构建
 
-            - **MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe**：Windows 安装包（双击即用，CloudBase 同步 + Discogs 厂牌查询已内嵌）
+            - **MusicFinder-v${{ steps.v.outputs.v }}-Windows-Setup.exe**：Windows 安装程序（双击安装，自动配置 Defender 排除，装完即用、无需任何手动命令）
             - **MusicFinder-v${{ steps.v.outputs.v }}-Mac.zip**：macOS 安装包（解压后拖入应用）
 
+            > Windows 用户请下载 **Setup 安装程序**：安装时会把程序目录加入 Windows Defender
+            > 排除列表 —— 这是 Windows 端搜索提速的关键一步，无需再手动执行任何 PowerShell 命令。
+            >
             > 搜索歌曲需先在「Cookie 设置」页用一键浏览器登录自己的音乐账号。
           files: |
-            release/MusicFinder-v${{ steps.v.outputs.v }}-Windows.exe
+            release/MusicFinder-v${{ steps.v.outputs.v }}-Windows-Setup.exe
             release/MusicFinder-v${{ steps.v.outputs.v }}-Mac.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -276,7 +312,7 @@ jobs:
           {
             echo "## 📦 国内直连下载地址（腾讯云 COS）"
             echo ""
-            echo "- **Windows（最新）**: $BASE/MusicFinder-latest-Windows.exe"
+            echo "- **Windows（最新）**: $BASE/MusicFinder-latest-Windows-Setup.exe"
             echo "- **macOS（最新）**: $BASE/MusicFinder-latest-Mac.zip"
             echo ""
             echo "> 以上为固定直链，每次发版自动更新内容；无需 VPN、无需访问 GitHub。"

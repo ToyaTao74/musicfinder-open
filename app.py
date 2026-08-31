@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.28.6'
+APP_VERSION        = '4.29.0'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.28.5 证据监测·数据监控歌单一键导入授权曲库（含匹配器根因修复）'
-APP_VERSION_DATE   = '2026-08-24'
+APP_VERSION_NAME   = 'v4.29.0 Windows 安装器：双击安装即自动配置 Defender 排除，装完即用（搜索提速）'
+APP_VERSION_DATE   = '2026-08-31'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -47,16 +47,36 @@ import config  # 云端配置默认值兜底（CLOUDBASE_URL / CLOUDBASE_TOKEN�
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger('musicfinder')
 
-# 打包感知：PyInstaller 冻结后资源位于 sys._MEIPASS，开发/本地运行时在同目录
+# 打包感知（三种运行形态）：
+#   one-file 冻结：资源解压到 sys._MEIPASS（Windows 为 %TEMP%\_MEIxxxx，每次运行都要解压一遍）
+#   one-dir  冻结：资源就在 exe 同目录，且不存在 sys._MEIPASS —— v4.29 起 Windows 采用此形态，
+#                  彻底避免每次启动把几百 MB（含 Chromium）解压到临时目录并被杀软实时扫描。
+#   开发/本地运行：资源在源码目录 BASE_DIR
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BUNDLE_DIR = getattr(sys, '_MEIPASS', BASE_DIR)
+_MEIPASS = getattr(sys, '_MEIPASS', None)
+# FROZEN：打包冻结态（one-file 与 one-dir 皆为真）。判断「是否打包版」请统一用它，
+# 不要再拿 sys._MEIPASS 是否存在来判断——one-dir 下该变量不存在，会误判成开发态，
+# 导致浏览器路径指错、reloader 被误开等一系列问题。
+FROZEN = bool(getattr(sys, 'frozen', False)) or bool(_MEIPASS)
+if _MEIPASS:
+    BUNDLE_DIR = _MEIPASS                                              # one-file：临时解压目录
+elif FROZEN:
+    # one-dir：资源与 exe 同目录（spec 已用 contents_directory='.' 平铺）。
+    # 若该参数因 PyInstaller 版本差异未生效，依赖会被放进 _internal/ 子目录，
+    # 这里探测一次，两种布局都能定位到 templates / playwright_browsers。
+    _exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    _internal_dir = os.path.join(_exe_dir, '_internal')
+    BUNDLE_DIR = _internal_dir if os.path.isdir(os.path.join(_internal_dir, 'templates')) else _exe_dir
+else:
+    BUNDLE_DIR = BASE_DIR                                              # 开发态
 
 # 打包后 Playwright 浏览器路径（分平台）：
-#   Windows：Chromium 已烤进安装包（bundle 内 playwright_browsers），用户零下载、零等待。
+#   Windows：Chromium 已烤进安装包（BUNDLE_DIR 内 playwright_browsers），用户零下载、零等待。
+#            one-file / one-dir 两种形态都适用，因 BUNDLE_DIR 已按形态指向正确位置。
 #   macOS  ：PyInstaller 给嵌套 Chromium.app 做 ad-hoc 重签会失败，故不烤包，
 #            改为首次一键登录时按需下载到用户级缓存（PLAYWRIGHT_BROWSERS_PATH='0'）。
 #            且登录优先复用系统 Chrome（channel='chrome'），多数 Mac 装了 Chrome 则根本不下载。
-if getattr(sys, '_MEIPASS', None):
+if FROZEN:
     if sys.platform.startswith('win'):
         os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', os.path.join(BUNDLE_DIR, 'playwright_browsers'))
     else:
@@ -1504,7 +1524,7 @@ def run_browser_login(platform, timeout=360, target='cookies'):
     try:
         # 打包环境：Windows 浏览器已烤进包（零下载）；macOS 若本机无 Chrome 则按需下载到
         # 用户级缓存。下载过程中通过 on_status 实时回传状态，慢网也不像卡死。
-        if getattr(sys, '_MEIPASS', None):
+        if FROZEN:
             _status_reg = LOGIN_STATUS if target == 'cookies' else HEART_LOGIN_STATUS
             def _on_prep(m):
                 st = _status_reg.get(platform)
@@ -6025,9 +6045,9 @@ try:
     # 对 QQ/酷狗的请求量凭空翻倍，是触发平台限流的隐形推手。
     # 只有「真正对外服务的那个进程」才启动后台 worker：
     #   · reloader 子进程：WERKZEUG_RUN_MAIN == 'true'
-    #   · 打包冻结版（无 reloader）：sys._MEIPASS 存在
+    #   · 打包冻结版（无 reloader）：FROZEN 为真（one-file / one-dir 均覆盖）
     #   · 其它情况（reloader 父进程 / 被当模块 import）只注册路由，不起线程
-    _bv2_frozen = getattr(sys, '_MEIPASS', None) is not None
+    _bv2_frozen = FROZEN
     _bv2_serving = (
         os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
         or (_bv2_frozen and __name__ == '__main__')
@@ -12835,10 +12855,8 @@ if __name__ == '__main__':
     # ── 首次运行把使用说明复制到程序同目录，方便用户查看 ──
     def _copy_usage_doc():
         try:
-            _meipass = getattr(sys, '_MEIPASS', None)
-            if not _meipass:
-                return
-            _src = os.path.join(_meipass, '使用说明.md')
+            # BUNDLE_DIR 已按 one-file / one-dir / 开发态指向正确资源位置，直接用
+            _src = os.path.join(BUNDLE_DIR, '使用说明.md')
             if not os.path.exists(_src):
                 return
             import shutil
@@ -13014,9 +13032,9 @@ if __name__ == '__main__':
     _APP_START_TS = time.time()
     # use_reloader=True: 改动 app.py 保存后服务自动重启，避免「改了代码线上还是旧逻辑」
     # 仅开 reloader，不开交互式调试器（debugger 关闭更安全）
-    # 冻结态（PyInstaller 打包后 sys._MEIPASS 存在）下关闭 reloader：
-    # 否则 reloader 子进程找不到模块会无限重启，服务起不来
-    FROZEN = getattr(sys, '_MEIPASS', None) is not None
+    # 冻结态（PyInstaller 打包，含 one-file 与 one-dir）下关闭 reloader：
+    # 否则 reloader 子进程找不到模块会无限重启，服务起不来。
+    # FROZEN 已在文件顶部按「sys.frozen 或 _MEIPASS」统一定义，此处直接复用。
     # reloader 默认开（开发期改代码自动重启）；常驻/launchd 托管时用环境变量
     # MF_RELOADER=0 关闭，避免 reloader 父子双进程与 launchd 的 KeepAlive 产生端口竞态
     _USE_RELOADER = (not FROZEN) and os.environ.get('MF_RELOADER', '1') != '0'
