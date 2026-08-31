@@ -301,11 +301,17 @@ jobs:
           BASE="https://$COS_BUCKET.cos.$COS_REGION.myqcloud.com/$PREFIX"
           for f in out/*; do
             bn=$(basename "$f")
-            # 带版本号的对象（归档用）
+            # 带版本号的对象（归档用）—— 全流程唯一一次真实跨境上传
             ./coscli cp "$f" "cos://mf/$PREFIX/$bn" --acl public-read
-            # 同时生成 latest 固定直链（团队永远点同一个链接拿最新版）
+            # latest 固定直链改用 COS 服务端复制生成（团队永远点同一个链接拿最新版）。
+            # 原因：runner 在境外、COS 桶在国内，同一个几百 MB 的安装包再传一遍会让
+            # 同步耗时翻倍（实测整步可卡数十分钟）；服务端复制是桶内操作、秒级完成。
+            # 若复制因故失败，回退为直接上传，保证 latest 链接一定有内容。
             latest=$(echo "$bn" | sed -E "s/v[0-9]+\.[0-9]+\.[0-9]+/latest/")
-            ./coscli cp "$f" "cos://mf/$PREFIX/$latest" --acl public-read
+            if ! ./coscli cp "cos://mf/$PREFIX/$bn" "cos://mf/$PREFIX/$latest" --acl public-read; then
+              echo "⚠️ 服务端复制 latest 失败，回退为直接上传"
+              ./coscli cp "$f" "cos://mf/$PREFIX/$latest" --acl public-read
+            fi
             echo "- 版本包: $BASE/$bn"
             echo "- 最新包: $BASE/$latest"
           done
