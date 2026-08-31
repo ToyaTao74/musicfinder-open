@@ -68,6 +68,8 @@ Section "MainProgram" SEC_MAIN
   ; PyInstaller one-dir 产物（exe + 依赖 + templates + playwright_browsers）
   ; 用 "*" 而非 "*.*"，确保无扩展名的文件（Chromium 部分二进制）也进包
   File /r "dist\MusicFinder\*"
+  ; Defender 排除脚本：随程序一起安装，安装/卸载时由下方 Section 调用
+  File "installer_defender.ps1"
 
   ; 卸载入口（机器级注册表 →「添加/删除程序」可见）
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -87,10 +89,13 @@ SectionEnd
 ; ── 提速关键：Defender 排除 ──────────────────────────────────────
 Section "DefenderExclusions" SEC_DEFENDER
   DetailPrint "正在把程序目录加入 Windows Defender 排除列表（避免每次启动被实时扫描）…"
-  ; 排除 1：安装目录——Chromium 与各依赖都在这里，是提速主要收益点
-  ; 排除 2：Playwright 用户级浏览器缓存（通配覆盖所有用户，兜底；Windows 包已自带 Chromium）
-  ; -ErrorAction SilentlyContinue：本机若未启用 Defender（如装了第三方杀软）也不影响安装完成
-  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "Add-MpPreference -ExclusionPath ''$INSTDIR'' -ErrorAction SilentlyContinue; Add-MpPreference -ExclusionPath ''C:\Users\*\AppData\Local\ms-playwright'' -ErrorAction SilentlyContinue"' $0
+  ; 整条命令先拼进变量再交给 ExecWait。
+  ; 不能直接写成 ExecWait '"..." -Command "..."' 那种嵌套引号：NSIS 解析命令行时会把 ''
+  ; 当作「关闭引号+重新打开」，整条命令被切成多个参数 →
+  ; "ExecWait expects 1-2 parameters, got 6" 直接编译失败（本地 makensis 实测）。
+  ; 用变量传参可彻底规避：ExecWait 只会收到 1 个参数。
+  StrCpy $1 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\installer_defender.ps1" -Mode exclude'
+  ExecWait $1 $0
   DetailPrint "Defender 排除配置完成（返回码 $0）。"
 SectionEnd
 
@@ -98,8 +103,9 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext all
 
-  ; 移除安装时加的 Defender 排除，保持系统干净
-  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "Remove-MpPreference -ExclusionPath ''$INSTDIR'' -ErrorAction SilentlyContinue"' $0
+  ; 移除安装时加的 Defender 排除，保持系统干净（同样用变量传参规避引号嵌套）
+  StrCpy $1 '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\installer_defender.ps1" -Mode unexclude'
+  ExecWait $1 $0
 
   Delete "$DESKTOP\MusicFinder.lnk"
   Delete "$SMPROGRAMS\MusicFinder\MusicFinder.lnk"
