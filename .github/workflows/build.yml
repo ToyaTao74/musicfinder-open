@@ -116,8 +116,19 @@ jobs:
               if ($cmd) { $makensis = $cmd.Source }
             }
           }
+          # 最后兜底：候选路径都没命中时递归搜索（NSIS 的实际安装位置可能不在上述路径）
+          if (-not $makensis) {
+            Write-Host "  候选路径未命中，递归搜索 makensis.exe ..."
+            $found = Get-ChildItem -Path "C:\Program Files", "C:\Program Files (x86)", "C:\ProgramData" `
+              -Filter "makensis.exe" -Recurse -Depth 4 -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $makensis = $found.FullName; Write-Host "  递归搜索命中: $makensis" }
+          }
           if (-not $makensis) {
             Write-Host "::error::makensis 不可用：无法生成 Windows 安装器"
+            Write-Host "诊断 - 各候选路径存在性:"
+            foreach ($c in $candidates) { Write-Host "  $c => $(Test-Path $c)" }
+            Write-Host "诊断 - 'C:\Program Files (x86)' 顶层目录:"
+            Get-ChildItem "C:\Program Files (x86)" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
             exit 1
           }
           Write-Host "  使用 makensis: $makensis"
