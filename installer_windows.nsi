@@ -1,4 +1,4 @@
-; ══════════════════════════════════════════════════════════════════
+﻿; ══════════════════════════════════════════════════════════════════
 ;  MusicFinder Windows 安装脚本（NSIS）
 ;
 ;  核心目的：让用户「装完即用、无需任何手动配置」即可获得提速效果。
@@ -12,6 +12,9 @@
 ; ══════════════════════════════════════════════════════════════════
 
 !include "MUI2.nsh"
+
+; Unicode true：本脚本含大量中文，必须显式声明，否则非 ASCII 会按 ANSI 解析成乱码
+Unicode true
 
 Name "MusicFinder"
 OutFile "dist\MusicFinder-v${APP_VERSION}-Windows-Setup.exe"
@@ -56,7 +59,13 @@ VIAddVersionKey "FileVersion" "${APP_VERSION}"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 
-!insertmacro MUI_LANGUAGE "SimpChinese"
+; 语言：优先简体中文；若该 NSIS 安装缺 SimpChinese 语言文件则自动退回英文。
+; 用编译期文件探测兜底 —— 语言文件缺失是安装器编译失败的常见原因，不能让它拖垮构建。
+!if /FileExists "${NSISDIR}\Contrib\Language files\SimpChinese.nlf"
+  !insertmacro MUI_LANGUAGE "SimpChinese"
+!else
+  !insertmacro MUI_LANGUAGE "English"
+!endif
 
 ; ── 主程序（必装）────────────────────────────────────────────────
 Section "安装主程序" SEC_MAIN
@@ -68,7 +77,8 @@ Section "安装主程序" SEC_MAIN
 
   SetOutPath "$INSTDIR"
   ; PyInstaller one-dir 产物（exe + 依赖 + templates + playwright_browsers）
-  File /r "dist\MusicFinder\*.*"
+  ; 用 "*" 而非 "*.*"：确保无扩展名的文件（如 Chromium 的部分二进制）也被打进安装包
+  File /r "dist\MusicFinder\*"
 
   ; 卸载入口（机器级注册表，对应「添加/删除程序」）
   WriteUninstaller "$INSTDIR\Uninstall.exe"

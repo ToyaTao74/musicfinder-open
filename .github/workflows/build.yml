@@ -80,21 +80,61 @@ jobs:
       - name: 编译 Windows 安装器（安装时自动把安装目录加入 Defender 排除）
         # 安装器是分发给团队的主产物：双击安装 → 仅弹一次 UAC → 自动加 Defender 排除，
         # 之后永久提速、无需用户执行任何命令。NSIS 缺失时现场安装。
+        # 诊断刻意做全：「makensis 找不到」和「nsi 编译报错」表现都是整个步骤变红，
+        # 没有这些输出就只能靠猜，排障要来回跑 CI。
         shell: pwsh
         run: |
-          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (-not (Test-Path $makensis)) {
+          Write-Host "=== [1/4] 确认 one-dir 产物存在 ==="
+          if (-not (Test-Path "dist\MusicFinder\MusicFinder.exe")) {
+            Write-Host "::error::dist\MusicFinder\MusicFinder.exe 不存在，PyInstaller 产物异常"
+            Get-ChildItem dist -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+            exit 1
+          }
+          Write-Host "dist\MusicFinder 内容（前 15 项）:"
+          Get-ChildItem "dist\MusicFinder" | Select-Object -ExpandProperty Name | Select-Object -First 15
+
+          Write-Host "=== [2/4] 定位 makensis ==="
+          $candidates = @(
+            "C:\Program Files (x86)\NSIS\makensis.exe",
+            "C:\Program Files\NSIS\makensis.exe",
+            "C:\ProgramData\chocolatey\lib\nsis\tools\makensis.exe"
+          )
+          $makensis = $null
+          foreach ($c in $candidates) {
+            if (Test-Path $c) { Write-Host "  命中候选路径: $c"; $makensis = $c; break }
+          }
+          if (-not $makensis) {
             $cmd = Get-Command makensis -ErrorAction SilentlyContinue
-            if ($cmd) { $makensis = $cmd.Source }
+            if ($cmd) { Write-Host "  命中 PATH: $($cmd.Source)"; $makensis = $cmd.Source }
           }
-          if (-not $makensis -or -not (Test-Path $makensis)) {
-            Write-Host "未发现 NSIS，开始安装…"
-            choco install nsis -y
-            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (-not $makensis) {
+            Write-Host "  未找到 NSIS，执行 choco install nsis ..."
+            choco install nsis -y --no-progress
+            foreach ($c in $candidates) { if (Test-Path $c) { $makensis = $c; break } }
+            if (-not $makensis) {
+              $cmd = Get-Command makensis -ErrorAction SilentlyContinue
+              if ($cmd) { $makensis = $cmd.Source }
+            }
           }
-          if (-not (Test-Path $makensis)) { Write-Error "makensis 不可用：无法生成 Windows 安装器" }
+          if (-not $makensis) {
+            Write-Host "::error::makensis 不可用：无法生成 Windows 安装器"
+            exit 1
+          }
+          Write-Host "  使用 makensis: $makensis"
           & $makensis /VERSION
-          & $makensis /DAPP_VERSION="${{ steps.v.outputs.v }}" installer_windows.nsi
+
+          Write-Host "=== [3/4] 编译 installer_windows.nsi ==="
+          & $makensis /V2 /DAPP_VERSION="${{ steps.v.outputs.v }}" installer_windows.nsi
+          $rc = $LASTEXITCODE
+          Write-Host "makensis 退出码 = $rc"
+
+          Write-Host "=== [4/4] 校验安装器产物 ==="
+          $out = "dist\MusicFinder-v${{ steps.v.outputs.v }}-Windows-Setup.exe"
+          if (($rc -ne 0) -or -not (Test-Path $out)) {
+            Write-Host "::error::安装器编译失败或未产出 (exit=$rc, 期望产物=$out)"
+            exit 1
+          }
+          Get-Item $out | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
       # 免安装压缩包：安装器万一出问题时团队仍有可用产物（需自行加 Defender 排除）
       - name: 额外产出免安装压缩包（兜底，失败不阻塞）
