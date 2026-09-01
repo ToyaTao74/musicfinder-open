@@ -43,3 +43,4 @@ Thumbs.db
 
 # Playwright 浏览器二进制（仅 CI 打包时下载，体积大，勿提交）
 pw_browsers/
+latest.json

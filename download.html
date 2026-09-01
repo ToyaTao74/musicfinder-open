@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MusicFinder 安装包下载</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(160deg, #eef4ff 0%, #f6f4ff 45%, #fdf1f6 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    width: 100%; max-width: 440px;
+    background: #fff; border-radius: 20px;
+    box-shadow: 0 12px 40px rgba(50, 70, 120, .10), 0 2px 8px rgba(50,70,120,.05);
+    padding: 36px 32px 28px;
+    text-align: center;
+  }
+  .logo {
+    font-size: 26px; font-weight: 700; letter-spacing: .5px; color: #1c2433;
+  }
+  .logo .dot { color: #4f6ef7; }
+  .slogan { margin-top: 6px; font-size: 13px; color: #8a93a6; }
+  .badges { margin-top: 18px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 5px 14px; border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+  }
+  .badge.ver  { background: #eef2ff; color: #3b5bfd; }
+  .badge.time { background: #f3f4f6; color: #6b7280; font-weight: 500; }
+  .btns { margin-top: 26px; display: flex; flex-direction: column; gap: 14px; }
+  .btn {
+    display: flex; align-items: center; gap: 14px;
+    padding: 15px 20px; border-radius: 14px;
+    text-decoration: none; color: #fff;
+    transition: transform .15s ease, box-shadow .15s ease, opacity .15s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(0); }
+  .btn.win { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 6px 18px rgba(37, 99, 235, .28); }
+  .btn.mac { background: linear-gradient(135deg, #334155, #1e293b); box-shadow: 0 6px 18px rgba(30, 41, 59, .28); }
+  .btn svg { width: 26px; height: 26px; fill: #fff; flex-shrink: 0; }
+  .btn .txt { flex: 1; text-align: left; }
+  .btn .t1 { font-size: 16px; font-weight: 600; }
+  .btn .t2 { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .loading { color: #9aa3b2; font-size: 12px; margin-top: 4px; }
+  .tips {
+    margin-top: 24px; padding-top: 18px; border-top: 1px solid #f0f1f5;
+    text-align: left; font-size: 12.5px; color: #8a93a6; line-height: 1.9;
+  }
+  .tips b { color: #4b5563; font-weight: 600; }
+  .foot { margin-top: 16px; font-size: 11px; color: #b3bac6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">MusicFinder<span class="dot">.</span></div>
+  <div class="slogan">多平台音乐搜索聚合 · 证据监测</div>
+
+  <div class="badges">
+    <span class="badge ver" id="verBadge">版本加载中…</span>
+    <span class="badge time" id="timeBadge"></span>
+  </div>
+
+  <div class="btns">
+    <a class="btn win" id="btnWin" href="MusicFinder-latest-Windows-Setup.exe" download>
+      <svg viewBox="0 0 24 24"><path d="M3 5.55 10.6 4.5v6.9H3V5.55zM11.6 4.33 21 3v8.4h-9.4V4.33zM3 12.6h7.6v6.9L3 18.45V12.6zm8.6 0H21V21l-9.4-1.33V12.6z"/></svg>
+      <span class="txt">
+        <span class="t1">Windows 版下载</span>
+        <span class="t2" id="winMeta">Setup 安装程序 · 双击安装即用</span>
+      </span>
+    </a>
+    <a class="btn mac" id="btnMac" href="MusicFinder-latest-Mac.zip" download>
+      <svg viewBox="0 0 24 24"><path d="M16.36 12.8c.03-2.35 1.92-3.48 2-3.53-1.09-1.6-2.79-1.82-3.4-1.85-1.45-.15-2.83.85-3.56.85-.74 0-1.87-.83-3.08-.81-1.58.02-3.04.92-3.86 2.34-1.65 2.86-.42 7.1 1.18 9.42.78 1.14 1.71 2.42 2.93 2.37 1.18-.05 1.62-.76 3.05-.76 1.42 0 1.82.76 3.06.74 1.26-.02 2.06-1.15 2.83-2.3.9-1.32 1.27-2.6 1.29-2.66-.03-.01-2.46-.95-2.49-3.76zM14.02 5.43c.65-.79 1.09-1.89.97-2.98-.94.04-2.07.62-2.74 1.41-.6.7-1.13 1.82-.99 2.89 1.05.08 2.11-.53 2.76-1.32z"/></svg>
+      <span class="txt">
+        <span class="t1">macOS 版下载</span>
+        <span class="t2" id="macMeta">解压后拖入应用程序</span>
+      </span>
+    </a>
+  </div>
+
+  <div class="tips">
+    <b>使用提示</b><br>
+    · Windows 双击安装即可，安装时自动完成提速配置（Defender 排除），无需任何命令<br>
+    · 首次使用请先在「Cookie 设置」页用一键浏览器登录你的音乐账号<br>
+    · 本页为固定地址，发版后自动更新，建议收藏
+  </div>
+
+  <div class="foot">MusicFinder 团队内部分发 · 由 CI 自动生成</div>
+</div>
+
+<script>
+(async function () {
+  try {
+    const r = await fetch('latest.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    document.getElementById('verBadge').textContent = 'v' + d.version;
+    document.getElementById('timeBadge').textContent = '更新于 ' + d.updated_at;
+    const w = d.files && d.files.windows, m = d.files && d.files.mac;
+    if (w) {
+      document.getElementById('btnWin').href = w.name;
+      document.getElementById('winMeta').textContent =
+        'Setup 安装程序 · ' + (w.size_mb ? w.size_mb + ' MB' : '双击安装即用');
+    }
+    if (m) {
+      document.getElementById('btnMac').href = m.name;
+      document.getElementById('macMeta').textContent =
+        '解压后拖入应用程序' + (m.size_mb ? ' · ' + m.size_mb + ' MB' : '');
+    }
+  } catch (e) {
+    // 拉取失败也要兜底：版本徽章给提示，按钮保持默认 href（latest 固定链接）仍可下载
+    document.getElementById('verBadge').textContent = '获取版本信息失败';
+    document.getElementById('timeBadge').textContent = '';
+  }
+})();
+</script>
+</body>
+</html>
