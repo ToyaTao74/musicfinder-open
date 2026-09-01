@@ -207,14 +207,26 @@ def api_task_start():
         )
         created.append(tid)
 
-    def run_all():
-        for tid in created:
+    def _run_ids(tids, run_opts):
+        for tid in tids:
             t = db.get_task(tid)
             if not t:
                 continue
             run_task(tid, t['song_name'], artist=t['artist'], version=t['version'],
                      platforms=json.loads(t['platforms']) if isinstance(t['platforms'], str) else t['platforms'],
-                     opts=opts)
+                     opts=run_opts)
+
+    def run_all():
+        _run_ids(created, opts)
+        # 接续消费：若本批提交时同类任务正在跑（_start_job 返回 ok:false），
+        # 期间入库的新任务会停留在 queued 且无人执行。job 收尾时统一补跑，
+        # 兑现「新任务已加入队列，将在当前任务结束后执行」的承诺；
+        # 最多补跑 5 轮，防止极端情况下反复扫到新任务导致 job 不退出。
+        for _ in range(5):
+            leftover = [t['id'] for t in db.list_tasks(200) if t['status'] == 'queued']
+            if not leftover:
+                break
+            _run_ids(leftover, opts)
 
     ok, err = _start_job('evidence_monitor', run_all, label=f'监测 {len(created)} 首')
     return jsonify({'ok': ok, 'error': err, 'task_ids': created})

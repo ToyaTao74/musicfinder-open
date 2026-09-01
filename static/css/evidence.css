@@ -60,6 +60,10 @@
 .ev-msg { display: block; font-size: 12px; color: var(--text-secondary, #555); margin-top: 8px; }
 .ev-msg.ok { color: #16a34a; }
 .ev-msg.err { color: #e63946; }
+.ev-msg.warn { color: #d97706; }
+
+/* 发布时间列：短日期，不换行 */
+.ev-col-pub { white-space: nowrap; font-size: 12px; color: var(--text-secondary, #555); }
 
 .ev-task-status { font-size: 13px; color: var(--text-secondary, #555); margin-bottom: 14px; min-height: 20px; }
 

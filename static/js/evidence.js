@@ -150,7 +150,10 @@
     } else {
       sel.innerHTML = state.tasks.map(t => `<option value="${t.id}">#${t.id} ${esc(t.song_name)}${t.artist ? ' · ' + esc(t.artist) : ''}</option>`).join('');
     }
-    if (!state.taskId && state.tasks.length) state.taskId = state.tasks[0].id;
+    // 兜底取「最大任务号」而非依赖列表顺序：一旦后端排序变化或列表被截断，
+    // 也能保证「默认选中最新任务」的语义成立（用户实测曾出现选中旧任务 15 的反馈）
+    if (!state.taskId && state.tasks.length)
+      state.taskId = Math.max(...state.tasks.map(t => t.id));
     if (state.taskId) sel.value = String(state.taskId);
     await loadDashboard();
   }
@@ -363,6 +366,7 @@
         <td class="ev-col-links">${officialHtml}</td>
         <td class="ev-col-links">${sodaHtml}</td>
         <td>${interS}</td>
+        <td class="ev-col-pub" title="视频/作品发布时间">${e.uploaded_at ? esc(e.uploaded_at) : '<span style="opacity:.4">—</span>'}</td>
         <td>${basisText(e)}</td>
         <td>
           <div class="ev-judge">
@@ -514,9 +518,20 @@
           platforms, douyinTarget: Number($('#evDouyinTarget').value) })
       });
       msg.textContent = '已开始，后台抓取中…'; msg.className = 'ev-msg ok';
+      // 三个关键点（2026-09-01 修复「生成后跳到旧任务 15」）：
+      // ① 取最大任务号而非数组末尾——多任务时防后端顺序变化；
+      // ② 后端 job 被占用（_start_job 返回 ok:false）时任务【已入库】且 HTTP 仍是 200，
+      //    api() 不会抛错——必须照样跳到新任务，否则页面停留在旧任务上误导用户；
+      // ③ ok:false 时明示「已加入队列」，文案不再假装"已开始抓取"。
       const newIds = (r && r.data && r.data.task_ids) || [];
-      if (newIds.length) state.taskId = newIds[newIds.length - 1];
+      if (newIds.length) state.taskId = Math.max(...newIds);
       await loadTasks();
+      if (r && r.ok === false) {
+        msg.textContent = `${r.error || '任务已提交'}；新任务 #${state.taskId} 已加入队列，将在当前任务结束后执行`;
+        msg.className = 'ev-msg warn';
+      } else {
+        msg.textContent = '已开始，后台抓取中…'; msg.className = 'ev-msg ok';
+      }
       // 视觉提示：让用户清晰感知 selector 已自动切到新任务
       flashTaskJump();
       startPolling();

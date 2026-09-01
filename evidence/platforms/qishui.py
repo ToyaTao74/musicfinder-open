@@ -90,7 +90,8 @@ def search(song_name, artist='', version='', limit=20, **_):
             'interactions': interactions,
             'match_basis': _basis(name, performer, song_name, artist),
             'uploader': performer,
-            'uploaded_at': '',
+            # v4.29.1：主程序 search_qishui 现在带回 release_date（专辑发布日 YYYY-MM-DD）
+            'uploaded_at': row.get('release_date') or '',
             'extra': {
                 'album': row.get('album') or '',
                 'lyricist': row.get('lyricist') or '',

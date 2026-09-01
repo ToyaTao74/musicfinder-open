@@ -108,14 +108,27 @@ def search(song_name, artist='', version='', limit=20, **_):
             continue
         name = song.get('name', '')
         artists = '/'.join(a.get('name', '') for a in song.get('artists', []))
-        album = (song.get('album') or {}).get('name', '')
+        album_obj = song.get('album') or {}
+        album = album_obj.get('name', '')
         url = f'https://music.163.com/song?id={sid}'
+        # v4.29.1：发布时间 = 专辑发行日（album.publishTime 毫秒时间戳 → 北京时间 YYYY-MM-DD）
+        uploaded_at = ''
+        try:
+            pt = album_obj.get('publishTime')
+            if pt:
+                import datetime as _dt
+                uploaded_at = _dt.datetime.fromtimestamp(
+                    int(pt) / 1000,
+                    _dt.timezone(_dt.timedelta(hours=8)),
+                ).strftime('%Y-%m-%d')
+        except Exception:
+            uploaded_at = ''
         candidates.append({
             'song_name': name, 'artist': artists, 'version': '',
             'official_url': url, 'video_url': url, 'soda_link': '',
             'interactions': _fetch_counts(s, sid),
             'match_basis': _basis(name, artists, song_name, artist),
-            'uploader': artists, 'uploaded_at': '',
+            'uploader': artists, 'uploaded_at': uploaded_at,
             'extra': {'netease_id': sid, 'album': album},
         })
     return candidates
