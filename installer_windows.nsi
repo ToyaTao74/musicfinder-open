@@ -10,10 +10,11 @@
 ;    makensis /DAPP_VERSION=4.29.0 installer_windows.nsi
 ;  产物：dist\MusicFinder-v<版本>-Windows-Setup.exe
 ;
-;  注意：本脚本刻意只保留最小可用指令集。Section 名、快捷方式名一律用
-;  ASCII，中文只出现在注释与 DetailPrint/完成页静态文本里（配合
-;  Unicode true + UTF-8 BOM 显示正常）。此前版本带的 VIProductVersion /
-;  VIAddVersionKey / MUI_FINISHPAGE_RUN 等已在排障中移除，勿轻易加回。
+;  注意：Section 名、快捷方式名一律用 ASCII，中文只出现在注释与 DetailPrint /
+;  完成页静态文本里（配合 Unicode true + UTF-8 BOM 显示正常）。
+;  另：ExecWait 一律走「StrCpy 拼进变量再传参」的写法 —— NSIS 解析命令行时会把
+;  '' 当成「关闭引号+重新打开引号」而把命令切成多段，直接编译失败（详见
+;  installer_defender.ps1 头部注释）。这是本脚本唯一踩过的坑，改命令时务必留意。
 ; ══════════════════════════════════════════════════════════════════
 
 !include "MUI2.nsh"
@@ -40,7 +41,20 @@ SetCompressor /SOLID lzma
   !define APP_PUBLISHER "MusicFinder"
 !endif
 
+; 版本元数据：右键安装器 → 属性 → 详细信息 里能看到版本号，
+; 与文件名、安装界面标题一起，三处都能确认「手里这版是哪个版本」
+; （VIProductVersion 要求 4 段，APP_VERSION 是 3 段，补 .0）
+VIProductVersion "${APP_VERSION}.0"
+VIAddVersionKey "ProductName" "MusicFinder"
+VIAddVersionKey "ProductVersion" "${APP_VERSION}"
+VIAddVersionKey "CompanyName" "${APP_PUBLISHER}"
+VIAddVersionKey "FileDescription" "MusicFinder 安装程序 v${APP_VERSION}"
+VIAddVersionKey "FileVersion" "${APP_VERSION}"
+VIAddVersionKey "LegalCopyright" "${APP_PUBLISHER}"
+
 !define MUI_ABORTWARNING
+; 安装向导首页标题带版本号，安装时就能一眼看出装的是哪版
+!define MUI_WELCOMEPAGE_TITLE "MusicFinder v${APP_VERSION} 安装向导"
 !define MUI_FINISHPAGE_TEXT "MusicFinder v${APP_VERSION} 安装完成。$\r$\n$\r$\n已自动将安装目录加入 Windows Defender 排除列表，搜索速度已优化，无需再做任何配置。$\r$\n$\r$\n请从桌面或开始菜单启动 MusicFinder；首次使用先在「Cookie 设置」页用一键登录配置你的音乐账号。"
 
 !insertmacro MUI_PAGE_WELCOME

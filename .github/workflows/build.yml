@@ -374,3 +374,52 @@ jobs:
             echo ""
             echo "> 以上为固定直链，每次发版自动更新内容；无需 VPN、无需访问 GitHub。"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup-cos:
+    name: 清理 COS 上的旧命名安装包
+    # 产物改名会在桶里留下「孤儿对象」：v4.29 起 Windows 产物由
+    # MusicFinder-latest-Windows.exe 改为 MusicFinder-latest-Windows-Setup.exe，
+    # 旧名永远不会被新上传覆盖，留着会让团队点到旧链接下到老版本。
+    # 这里每次发版顺手清掉；独立于 sync-cos（不下载产物，秒级完成）。
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: 检查 COS 密钥是否已配置（未配置则跳过，不阻塞发版）
+        id: coscheck
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+        run: |
+          if [ -z "$COS_SECRET_ID" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "⚠️ 未检测到 COS_SECRET_ID，跳过旧对象清理。"
+          else
+            echo "skip=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 安装 coscli 并生成配置
+        if: steps.coscheck.outputs.skip != '1'
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        run: |
+          # 腾讯云已把 coscli 仓库由 Tencent/coscli 改名为 tencentyun/coscli（旧 URL 404），
+          # 统一用国内镜像下载
+          curl -L -o coscli "https://cosbrowser.cloud.tencent.com/software/coscli/coscli-linux-amd64"
+          chmod +x coscli
+          printf 'cos:\n  base:\n    secretid: %s\n    secretkey: %s\n    sessiontoken: ""\n  buckets:\n  - name: %s\n    region: %s\n    alias: mf\n' \
+            "$COS_SECRET_ID" "$COS_SECRET_KEY" "$COS_BUCKET" "$COS_REGION" > "$HOME/.cos.yaml"
+          ./coscli --version || echo "coscli 下载/执行异常"
+
+      - name: 删除旧命名的 latest 对象
+        if: steps.coscheck.outputs.skip != '1'
+        run: |
+          # 需要清理的旧命名（one-file 时代遗留，已被 -Setup.exe 取代）
+          for obj in "MusicFinder-latest-Windows.exe"; do
+            if ./coscli rm "cos://mf/musicfinder/$obj"; then
+              echo "已删除旧对象: $obj"
+            else
+              echo "对象不存在或此前已删除，跳过: $obj"
+            fi
+          done
