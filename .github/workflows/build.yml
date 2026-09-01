@@ -511,8 +511,14 @@ jobs:
           open('download.rendered.html', 'w', encoding='utf-8').write(html)
           print('渲染完成: version=%s updated=%s' % (os.environ['VERSION'], os.environ['UPDATED']))
           PY
-          # 上传渲染后的页面与数据（小文件秒级）。显式设 text/html，确保浏览器打开即渲染而不是下载
-          ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read --meta-content-type "text/html; charset=utf-8" || \
+          # 上传渲染后的页面与数据（小文件秒级）。显式设 text/html + Content-Disposition: inline：
+          # 用户桶开了「强制下载」（x-cos-force-download: true），会给所有对象加
+          # Content-Disposition: attachment → 浏览器打开链接直接下载 html 而不渲染。
+          # 对象级显式声明 inline 可覆盖桶行为，让链接打开即显示页面。
+          ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read \
+            --meta-content-type "text/html; charset=utf-8" --meta-content-disposition "inline" || \
+          ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read \
+            --meta-content-type "text/html; charset=utf-8" || \
             ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read
           ./coscli cp latest.json "cos://mf/$PREFIX/latest.json" --acl public-read
           echo "## 🌏 下载页已发布" >> "$GITHUB_STEP_SUMMARY"
