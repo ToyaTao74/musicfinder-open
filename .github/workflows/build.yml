@@ -521,6 +521,55 @@ jobs:
             --meta-content-type "text/html; charset=utf-8" || \
             ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read
           ./coscli cp latest.json "cos://mf/$PREFIX/latest.json" --acl public-read
+
+      # ── 腾讯云 2024 平台政策：默认域名访问任何文件都强制 attachment（下载），
+      #    对象元数据 inline 会被 x-cos-force-download 覆盖。官方唯一免自定义域名的
+      #    预览通道 = 预签名 URL + response-content-disposition=inline（请求级覆盖）。
+      #    这里生成 20 年有效期的签名链接，自测响应头后写入 latest.json（page_url_signed），
+      #    团队固定使用该链接打开下载页。
+      - name: 生成下载页预签名链接（inline 直开）并自测
+        if: steps.coscheck.outputs.skip != '1'
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        run: |
+          COS_SECRET_ID=$COS_SECRET_ID COS_SECRET_KEY=$COS_SECRET_KEY \
+          COS_BUCKET=$COS_BUCKET COS_REGION=$COS_REGION python3 - <<'PY'
+          import hashlib, hmac, json, os, time, urllib.parse
+          sid, skey = os.environ['COS_SECRET_ID'], os.environ['COS_SECRET_KEY']
+          host = f"{os.environ['COS_BUCKET']}.cos.{os.environ['COS_REGION']}.myqcloud.com"
+          key = 'musicfinder/download.html'
+          start, end = int(time.time()) - 60, int(time.time()) + 60 * 60 * 24 * 365 * 20
+          sign_time = f'{start};{end}'
+          params = {'response-content-disposition': 'inline'}
+          plist = ';'.join(sorted(params))
+          pstr = '&'.join(f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}" for k, v in sorted(params.items()))
+          fmt = f"get\n/{key}\n{pstr}\n\n"
+          s2s = f"sha1\n{sign_time}\n{hashlib.sha1(fmt.encode()).hexdigest()}\n"
+          skey_h = hmac.new(skey.encode(), sign_time.encode(), hashlib.sha1).hexdigest()
+          sig = hmac.new(skey_h.encode(), s2s.encode(), hashlib.sha1).hexdigest()
+          url = (f"https://{host}/{key}?{pstr}&q-sign-algorithm=sha1&q-ak={sid}"
+                 f"&q-sign-time={sign_time}&q-key-time={sign_time}&q-header-list=&q-url-param-list={plist}&q-signature={sig}")
+          # 自测响应头
+          import urllib.request
+          req = urllib.request.Request(url, method='HEAD')
+          try:
+              resp = urllib.request.urlopen(req, timeout=20)
+              cd = resp.headers.get('Content-Disposition', '')
+              ct = resp.headers.get('Content-Type', '')
+              print(f'自测: HTTP {resp.status} | Content-Disposition={cd} | Content-Type={ct}')
+              print('inline 生效' if 'inline' in cd else '⚠️ inline 未生效，仍为 attachment')
+          except Exception as e:
+              print(f'自测请求异常: {e}')
+          # 写入 latest.json（ 团队固定链接 ）
+          d = json.load(open('latest.json', encoding='utf-8'))
+          d['page_url_signed'] = url
+          json.dump(d, open('latest.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+          print('PAGE_URL_SIGNED=' + url)
+          PY
+          ./coscli cp latest.json "cos://mf/musicfinder/latest.json" --acl public-read
           echo "## 🌏 下载页已发布" >> "$GITHUB_STEP_SUMMARY"
           echo "- 页面地址: $BASE/download.html" >> "$GITHUB_STEP_SUMMARY"
           echo "- 数据文件: $BASE/latest.json" >> "$GITHUB_STEP_SUMMARY"
