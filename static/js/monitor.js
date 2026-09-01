@@ -20,7 +20,7 @@ const CONF_TITLE = {
 let pvTempPath = '';
 let reviewPage = 1, reviewTotal = 0, reviewSize = parseInt(localStorage.getItem('monReviewSize')) || 10;
 let archivePage = 1, archiveTotal = 0, archiveSize = parseInt(localStorage.getItem('monArchiveSize')) || 30;
-let matchTimer = null, dailyTimer = null;
+let matchTimer = null, dailyTimer = null, dailyTimerAfter = null;
 let reportPeriod = 'day';
 
 // 名单管理（v4.25.20）：增删改 + 平台解锁/重搜 + 历史曲线 + 删除确认
@@ -291,11 +291,15 @@ async function triggerDaily(after) {
 }
 
 function startDailyPoll(after) {
-    if (dailyTimer) { if (after) dailyTimer._after = after; return; }
-    dailyTimer = setInterval(() => pollDaily(after), 1800);
-    dailyTimer._after = after;
+    // 注意：浏览器里 setInterval 返回的是数字（定时器 id），不能往它上面挂属性——
+    // 此前 dailyTimer._after = after 直接抛
+    // "Cannot create property '_after' on number '22'"，且 _after 从未被读取过（死代码）。
+    // 回调参数改用独立变量保存，重入时更新。
+    if (dailyTimer) { dailyTimerAfter = after || dailyTimerAfter; return; }
+    dailyTimerAfter = after;
+    dailyTimer = setInterval(() => pollDaily(dailyTimerAfter), 1800);
     $('monDailyProgress').hidden = false;
-    pollDaily(after);
+    pollDaily(dailyTimerAfter);
 }
 
 async function pollDaily(after) {
