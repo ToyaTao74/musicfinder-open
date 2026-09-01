@@ -573,3 +573,48 @@ jobs:
           echo "## 🌏 下载页已发布" >> "$GITHUB_STEP_SUMMARY"
           echo "- 页面地址: $BASE/download.html" >> "$GITHUB_STEP_SUMMARY"
           echo "- 数据文件: $BASE/latest.json" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-download-ghpages:
+    name: 发布下载页到 GitHub Pages（页面渲染通道）
+    # 腾讯云 2024 平台政策：COS / CloudBase 所有默认域名访问任何文件都服务端强制
+    # Content-Disposition: attachment（x-cos-force-download，优先级高于对象元数据与
+    # 预签名 URL 的 response-* 参数，均已实测被覆盖）——官方唯一出路是备案自定义域名。
+    # GitHub Pages 不受该政策限制，html 打开即渲染；页面在渲染时把下载按钮改写为
+    # COS 绝对直链，国内下载速度不受影响。configure-pages 的 enablement 会在
+    # 首次运行时自动为仓库启用 Pages，无需到仓库设置手动开启。
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/checkout@v4
+
+      - name: 渲染下载页（按钮指向 COS 直链）
+        env:
+          COS_BUCKET: ${{ secrets.COS_BUCKET }}
+          COS_REGION: ${{ secrets.COS_REGION }}
+        run: |
+          BASE="https://$COS_BUCKET.cos.$COS_REGION.myqcloud.com/musicfinder"
+          VERSION=$(grep -E "^APP_VERSION[[:space:]]*=" app.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")
+          UPDATED=$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')
+          WIN_SIZE=$(curl -sSI -m 20 "$BASE/MusicFinder-latest-Windows-Setup.exe" | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2}')
+          MAC_SIZE=$(curl -sSI -m 20 "$BASE/MusicFinder-latest-Mac.zip" | tr -d '\r' | awk 'tolower($1)=="content-length:"{print $2}')
+          mkdir -p site
+          VERSION=$VERSION UPDATED=$UPDATED WIN_SIZE=${WIN_SIZE:-0} MAC_SIZE=${MAC_SIZE:-0} \
+          BASE_URL="$BASE" OUT=site/index.html python3 tools/render_download.py
+          cp site/index.html site/download.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
