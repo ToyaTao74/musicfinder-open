@@ -493,9 +493,27 @@ jobs:
               json.dump(data, f, ensure_ascii=False, indent=2)
           print(json.dumps(data, ensure_ascii=False))
           PY
-          # 上传页面与数据（小文件秒级）。显式设 text/html，确保浏览器打开即渲染而不是下载
-          ./coscli cp download.html "cos://mf/$PREFIX/download.html" --acl public-read --meta-content-type "text/html; charset=utf-8" || \
-            ./coscli cp download.html "cos://mf/$PREFIX/download.html" --acl public-read
+          # CI 渲染：把版本/时间/大小在上传时直接写进 HTML（占位符替换）。
+          # 下载页由此零运行时请求——此前依赖页面里 fetch latest.json，
+          # 微信内置浏览器等环境会「获取版本信息失败」；全新电脑打开即完整显示。
+          VERSION=$VERSION UPDATED=$UPDATED WIN_SIZE=${WIN_SIZE:-0} MAC_SIZE=${MAC_SIZE:-0} \
+          python3 - <<'PY'
+          import os, re
+          html = open('download.html', encoding='utf-8').read()
+          def mb(v):
+              return f'{int(v)/1048576:.1f} MB' if v != '0' else ''
+          html = (html.replace('__VERSION__', os.environ['VERSION'])
+                      .replace('__UPDATED__', os.environ['UPDATED'])
+                      .replace('__WIN_SIZE__', mb(os.environ['WIN_SIZE']))
+                      .replace('__MAC_SIZE__', mb(os.environ['MAC_SIZE'])))
+          html = re.sub(r'·\s*·', '·', html)      # 大小缺失时清理多余分隔点
+          html = re.sub(r'__[A-Z_]+__', '', html)  # 兜底：未替换的占位符清空
+          open('download.rendered.html', 'w', encoding='utf-8').write(html)
+          print('渲染完成: version=%s updated=%s' % (os.environ['VERSION'], os.environ['UPDATED']))
+          PY
+          # 上传渲染后的页面与数据（小文件秒级）。显式设 text/html，确保浏览器打开即渲染而不是下载
+          ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read --meta-content-type "text/html; charset=utf-8" || \
+            ./coscli cp download.rendered.html "cos://mf/$PREFIX/download.html" --acl public-read
           ./coscli cp latest.json "cos://mf/$PREFIX/latest.json" --acl public-read
           echo "## 🌏 下载页已发布" >> "$GITHUB_STEP_SUMMARY"
           echo "- 页面地址: $BASE/download.html" >> "$GITHUB_STEP_SUMMARY"

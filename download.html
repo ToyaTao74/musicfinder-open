@@ -47,7 +47,6 @@
   .btn .txt { flex: 1; text-align: left; }
   .btn .t1 { font-size: 16px; font-weight: 600; }
   .btn .t2 { font-size: 12px; opacity: .85; margin-top: 2px; }
-  .loading { color: #9aa3b2; font-size: 12px; margin-top: 4px; }
   .tips {
     margin-top: 24px; padding-top: 18px; border-top: 1px solid #f0f1f5;
     text-align: left; font-size: 12.5px; color: #8a93a6; line-height: 1.9;
@@ -61,24 +60,26 @@
   <div class="logo">MusicFinder<span class="dot">.</span></div>
   <div class="slogan">多平台音乐搜索聚合 · 证据监测</div>
 
+  <!-- 版本信息由 CI 在上传时直接渲染进页面（__PLACEHOLDER__ 占位符）：
+       不依赖任何运行时请求，微信内置浏览器 / 全新电脑打开都能完整显示 -->
   <div class="badges">
-    <span class="badge ver" id="verBadge">版本加载中…</span>
-    <span class="badge time" id="timeBadge"></span>
+    <span class="badge ver">v__VERSION__</span>
+    <span class="badge time">更新于 __UPDATED__</span>
   </div>
 
   <div class="btns">
-    <a class="btn win" id="btnWin" href="MusicFinder-latest-Windows-Setup.exe" download>
+    <a class="btn win" href="MusicFinder-latest-Windows-Setup.exe" download>
       <svg viewBox="0 0 24 24"><path d="M3 5.55 10.6 4.5v6.9H3V5.55zM11.6 4.33 21 3v8.4h-9.4V4.33zM3 12.6h7.6v6.9L3 18.45V12.6zm8.6 0H21V21l-9.4-1.33V12.6z"/></svg>
       <span class="txt">
         <span class="t1">Windows 版下载</span>
-        <span class="t2" id="winMeta">Setup 安装程序 · 双击安装即用</span>
+        <span class="t2">Setup 安装程序 · __WIN_SIZE__ · 双击安装即用</span>
       </span>
     </a>
-    <a class="btn mac" id="btnMac" href="MusicFinder-latest-Mac.zip" download>
+    <a class="btn mac" href="MusicFinder-latest-Mac.zip" download>
       <svg viewBox="0 0 24 24"><path d="M16.36 12.8c.03-2.35 1.92-3.48 2-3.53-1.09-1.6-2.79-1.82-3.4-1.85-1.45-.15-2.83.85-3.56.85-.74 0-1.87-.83-3.08-.81-1.58.02-3.04.92-3.86 2.34-1.65 2.86-.42 7.1 1.18 9.42.78 1.14 1.71 2.42 2.93 2.37 1.18-.05 1.62-.76 3.05-.76 1.42 0 1.82.76 3.06.74 1.26-.02 2.06-1.15 2.83-2.3.9-1.32 1.27-2.6 1.29-2.66-.03-.01-2.46-.95-2.49-3.76zM14.02 5.43c.65-.79 1.09-1.89.97-2.98-.94.04-2.07.62-2.74 1.41-.6.7-1.13 1.82-.99 2.89 1.05.08 2.11-.53 2.76-1.32z"/></svg>
       <span class="txt">
         <span class="t1">macOS 版下载</span>
-        <span class="t2" id="macMeta">解压后拖入应用程序</span>
+        <span class="t2">解压后拖入应用程序 · __MAC_SIZE__</span>
       </span>
     </a>
   </div>
@@ -94,32 +95,5 @@
 
   <div class="foot">MusicFinder 团队内部分发 · 由 CI 自动生成</div>
 </div>
-
-<script>
-(async function () {
-  try {
-    const r = await fetch('latest.json?_=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status);
-    const d = await r.json();
-    document.getElementById('verBadge').textContent = 'v' + d.version;
-    document.getElementById('timeBadge').textContent = '更新于 ' + d.updated_at;
-    const w = d.files && d.files.windows, m = d.files && d.files.mac;
-    if (w) {
-      document.getElementById('btnWin').href = w.name;
-      document.getElementById('winMeta').textContent =
-        'Setup 安装程序 · ' + (w.size_mb ? w.size_mb + ' MB' : '双击安装即用');
-    }
-    if (m) {
-      document.getElementById('btnMac').href = m.name;
-      document.getElementById('macMeta').textContent =
-        '解压后拖入应用程序' + (m.size_mb ? ' · ' + m.size_mb + ' MB' : '');
-    }
-  } catch (e) {
-    // 拉取失败也要兜底：版本徽章给提示，按钮保持默认 href（latest 固定链接）仍可下载
-    document.getElementById('verBadge').textContent = '获取版本信息失败';
-    document.getElementById('timeBadge').textContent = '';
-  }
-})();
-</script>
 </body>
 </html>
