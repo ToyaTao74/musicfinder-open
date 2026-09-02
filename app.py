@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.29.1'
+APP_VERSION        = '4.29.2'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.29.1 证据监测：发布时间列（抖音/汽水/网易云全覆盖）+ 生成任务必跳最新 + 排队任务自动接续'
-APP_VERSION_DATE   = '2026-09-01'
+APP_VERSION_NAME   = 'v4.29.2 修复 QQ「已下架」误判（alertid=11 只弹版权提示不代表下架，用 switch bit12 播放开关二次核验）'
+APP_VERSION_DATE   = '2026-09-02'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -2094,13 +2094,16 @@ def _ts_to_date(ts, is_ms=False):
 
 
 def _qq_availability(song):
-    """判断 QQ 音乐单曲的可用状态。
+    """判断 QQ 音乐单曲的可用状态（搜索期初判）。
 
     实测字段规律（2026-08-04，client_search_cp 搜索结果）：
       正常可播：alertid=2/41/42, pay.payplay=1, msgid=15
-      灰色下架：alertid=11,      pay.payplay=0, msgid=0   （如「劫后重逢(克保和政芬)/罗大佑」）
-    alertid 是点击时的提示框 ID，11 = 「因版权保护暂无法播放」，是最可靠的下架信号。
-    payplay=0 单独不代表下架（免费歌也是 0），必须结合 alertid/msgid 判断。
+      灰色下架：alertid=11,      pay.payplay=0, msgid=0
+    ⚠️ 2026-09-02 修正：alertid=11 只表示「点击时弹版权提示框」（未登录/VIP 提示都会
+    触发），**不代表下架**——实测 alertid=11 的歌混着「真下架」与「网页可播」两种
+    （如 0028SkaF2HoELK 新不了情/黄小琥，网页可播却 alertid=11）。因此本函数的
+    「已下架」只是**嫌疑初判**，search_qq 末尾会用 _qq_verify_downgraded 二次核验
+    （真判据 = 详情接口 action.switch 的 bit12 在线播放开关）后再定稿。
     """
     def _i(v):
         # 注意：不能用 _safe_int，它把 0 也返回 None，会让 payplay==0 的判定失效
@@ -2115,15 +2118,50 @@ def _qq_availability(song):
         msgid = _i(song.get('msgid'))
         payplay = _i(pay.get('payplay'))
         if alertid == 11:
-            return '已下架'
+            return '已下架'      # 嫌疑标记，待 _qq_verify_downgraded 核验
         if payplay == 0 and msgid == 0:
-            return '已下架'
+            return '已下架'      # 同上
         # payplay=1 只表示 VIP 曲目，QQ 上绝大多数歌都是，属正常上架
         if payplay == 1:
             return '在架(VIP)'
         return '在架'
     except Exception:
         return ''
+
+
+def _qq_verify_downgraded(results, cookie_str=''):
+    """对初判「已下架」的 QQ 歌做二次核验（v4.29.2 误判修复）。
+
+    真正的下架判据 = 详情接口（fcg_play_single_song）返回 action.switch 的
+    bit12(0x1000)「在线播放开关」：
+      bit12=1 → 在线可播；bit12=0 → 真下架。
+    三方实测（2026-09-02）：正常可播/网页可播的歌 bit12=1，
+    真下架（罗大佑·劫后重逢 0012D6Lc00jqih）bit12=0，唯一差异位就是它。
+
+    搜索接口不返回 action.switch，故对「已下架」嫌疑歌逐个补查详情。
+    「已下架」嫌疑在实际结果里占比很小（通常 0~3 首/页），请求量可控。
+    """
+    suspects = [r for r in results
+                if (r.get('availability') == '已下架') and r.get('_songmid')]
+    if not suspects:
+        return
+    headers = {'User-Agent': COMMON_UA, 'Referer': 'https://y.qq.com/'}
+    if cookie_str:
+        headers['Cookie'] = cookie_str
+    for i, r in enumerate(suspects):
+        try:
+            resp = requests.get(
+                'https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg',
+                params={'songmid': r['_songmid'], 'format': 'json', 'platform': 'yqq'},
+                headers=headers, timeout=10)
+            song = (resp.json().get('data') or [{}])[0]
+            switch = ((song.get('action') or {}).get('switch')) or 0
+            if switch & 0x1000:
+                r['availability'] = '在架'
+        except Exception as e:
+            print(f"[QQ] 下架核验失败 {r.get('_songmid')}: {e}")
+        if i < len(suspects) - 1:
+            time.sleep(0.15)   # 轻微间隔防风控
 
 
 def _search_qq_smartbox(keyword, max_results=10):
@@ -2251,6 +2289,12 @@ def search_qq(keyword, max_results=30):
             _fetch_qq_details(results[:SEARCH_ENRICH_CAP], cookie_str)
         except Exception as e:
             print(f'[QQ] details 抓取失败(词曲等): {e}')
+        # v4.29.2：alertid=11 ≠ 已下架（未登录/VIP 提示也会触发），对嫌疑歌用
+        # 详情接口 action.switch bit12（在线播放开关）二次核验后再定稿，防误标
+        try:
+            _qq_verify_downgraded(results, cookie_str)
+        except Exception as e:
+            print(f'[QQ] 下架核验异常: {e}')
     return results
 
 
