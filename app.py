@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.29.2'
+APP_VERSION        = '4.29.3'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.29.2 修复 QQ「已下架」误判（alertid=11 只弹版权提示不代表下架，用 switch bit12 播放开关二次核验）'
-APP_VERSION_DATE   = '2026-09-02'
+APP_VERSION_NAME   = 'v4.29.3 歌词词曲解析扩充：填词/繁体（作詞·詞·編曲）/词曲合署/Written by/Songwriter/原词原曲/Text'
+APP_VERSION_DATE   = '2026-09-10'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -1854,6 +1854,16 @@ def _parse_lyricist_composer(lyric_text):
       [00:01.32]Arranged by：TEDDY     (QQ 编曲，附带给)
       Lyricist : Park Jinyoung          (网易云英文版)
       Composer : Teddy                  (网易云英文版)
+      ── v4.29.3 扩充 ──
+      填詞：林夕 / 填词：xxx            (粤语歌高频署法)
+      [00:00.00] 作詞：xxx 作曲：xxx    (繁体歌词；「作曲」简繁同形，作詞/詞/編曲需繁体)
+      词曲：xxx / 詞曲：xxx             (同人合署 → 词曲同填)
+      词/曲：xxx / 词·曲：xxx           (斜杠/间隔号合署)
+      Written by: X / Words & Music by: X (英文同人合署 → 词曲同填，冒号可省)
+      Music by: X / Music: X           (英文作曲)
+      Songwriter: X
+      原词：xxx / 原曲：xxx            (翻唱标注；原作者即认版权目标，映射到词/曲)
+      Text: X                          (古典乐谱惯例，作词)
     """
     if not lyric_text:
         return None, None
@@ -1863,54 +1873,102 @@ def _parse_lyricist_composer(lyric_text):
 
     # 标签候选：长标签（含英文后缀/前缀）放前面优先匹配
     # 顺序很关键：含 by 的要在不含 by 的前面，避免 "Lyricist" 被单独的 "词" 截断
+    # v4.29.3：补繁体（作詞/詞/填詞/原詞）、粤语（填词）、古典（Text）
     lyric_keys = [
         r'Lyrics?\s*by',           # Lyrics by / Lyric by
         r'Lyricist',               # 词 Lyricist / Lyricist: (全英)
-        r'作词',
-        r'词',
+        r'作詞|作词',
+        r'填詞|填词',              # 粤语歌高频
+        r'原詞|原词',
+        r'Text',                   # 古典乐谱惯例
+        r'詞|词',
     ]
     comp_keys = [
         r'Composed?\s*by',         # Composed by / Compose by
         r'Composer',               # 曲 Composer / Composer: (全英)
+        r'Music\s*by',             # Music by: (英文作曲)
+        r'譜曲|谱曲',
+        r'原曲',
         r'作曲',
+        r'Music',                  # Music: (英文作曲，裸词须放 Music by 之后)
         r'曲',
     ]
+
+    # 标签值截断：一行可能跟多个标签（如「词：A 曲：B 编曲：C 和声：D/E」），
+    # 把值截断到下一个标签前。v4.28.x 修正：裸关键词 词/曲 + 统一后缀 \s*[:：]
+    # （旧写法把「词：」写成带冒号 token 又外层追加 \s*[:：]，导致「曲：」永远
+    # 匹配不上，词作者被污染成「X 曲：Y」脏值）。v4.29.3 补繁体（作詞/詞/編曲）、
+    # 填词/填詞、谱曲/譜曲、原词/原曲/原詞、词曲/詞曲合署、
+    # Written by/Words & Music by/Songwriter/Text/Music。
+    # 裸词表（词/曲/詞/Music）必须放在长 token 之后，否则会把长标签拦腰截断。
+    _split_re = re.compile(
+        r'\s*(?:'
+        r'作词|作詞|作曲|词\s*Lyricist|曲\s*Composer|词|曲|詞|'
+        r'填词|填詞|谱曲|譜曲|原词|原詞|原曲|词曲|詞曲|'
+        r'编曲|編曲|混音|录音|缩混|母带|制作人|监制|出品|发行|统筹|和声|伴唱|'
+        r'Lyrics?\s*by|Composed?\s*by|Lyricist|Composer|'
+        r'Written\s*by|Words?\s*&\s*Music\s*by|Songwriter|'
+        r'Arranged?\s*by|Arranger|'
+        r'Piano|Guitar|Bass|Drums|Strings|Violin|Cello|Text|Music'
+        r')\s*[:：]'
+    )
+
+    def _clean(val):
+        val = _split_re.split(val)[0].strip()
+        # 去掉残留的英文后缀
+        val = re.sub(r'\s*[Ll]yricist$', '', val).strip()
+        val = re.sub(r'\s*[Cc]omposer$', '', val).strip()
+        return val
 
     def _find(keys, content):
         for k in keys:
             m = re.search(r'(?:' + k + r')\s*[:：]\s*(.+)$', content)
             if m:
-                # 同行可能跟了另一标签（如「词：林夕 曲：陈辉阳」），截断到下一个标签前
-                # 扩展截断列表，覆盖中英所有变体
-                # v4.28.x 修正 + 扩充：
-                #   * 旧词表把「词：/曲：/词:/曲:」写成带冒号 token，又在外层追加
-                #     \s*[:：]，等于要求「曲：」后再跟一个冒号 → 永远匹配不上，
-                #     导致「词：重乐 曲：方杨…」的 曲： 切断失效，词作者被污染成
-                #     「重乐 曲：方杨…」脏值（②d 作者铁证比对随之失败，改名歌误判未收录）。
-                #     改为裸关键词 词/曲 + 统一后缀 \s*[:：]。
-                #   * 补 编曲/混音/录音/缩混/母带/制作人/监制/出品/发行/统筹/和声/伴唱 等
-                #     制作角色，避免「曲：方杨@小分队 编曲：何佳 和声：任芯冉/化十…」整行被吞。
-                val = re.split(
-                    r'\s*(?:'
-                    r'作词|作曲|词\s*Lyricist|曲\s*Composer|词|曲|'
-                    r'编曲|混音|录音|缩混|母带|制作人|监制|出品|发行|统筹|和声|伴唱|'
-                    r'Lyrics?\s*by|Composed?\s*by|Lyricist|Composer|'
-                    r'Arranged?\s*by|Arranger|'
-                    r'Piano|Guitar|Bass|Drums|Strings|Violin|Cello'
-                    r')\s*[:：]',
-                    m.group(1)
-                )[0].strip()
-                # 去掉残留的英文后缀
-                val = re.sub(r'\s*[Ll]yricist$', '', val).strip()
-                val = re.sub(r'\s*[Cc]omposer$', '', val).strip()
-                return val
+                return _clean(m.group(1))
         return None
+
+    # v4.29.3：合署标签（词曲同一人）——「词曲：X」「詞曲：X」「词/曲：X」「词·曲：X」
+    # 及英文「Written by: X」「Words & Music by: X」「Songwriter: X」。
+    # 中文合署必须带冒号（防正文误吞：歌词正文可能出现「这首歌的词曲都很动人」）；
+    # 英文 by 本身就是标记，冒号可省。先于普通标签检测，命中则词曲双填；
+    # 后续行若有更准确的单独署名仍会补上空缺一侧。
+    _both_keys_colon = [       # 中文合署：冒号必带
+        r'词曲|詞曲',
+        r'词\s*[/·]\s*曲',
+        r'詞\s*[/·]\s*曲',
+    ]
+    _both_keys_free = [        # 英文合署：by 即标记，冒号可省
+        r'Words?\s*&\s*Music\s*by',
+        r'Written\s*by',
+        r'Songwriter',
+    ]
 
     for line in lyric_text.splitlines():
         # 去掉时间轴前缀 [mm:ss.xx]
         content = re.sub(r'^\[\d+:\d+(?:\.\d+)?\]', '', line).strip()
         if not content:
             continue
+        # 合署：词曲同人（限短行 + 中文必须带冒号，防把含「词曲」二字的正文歌词误吞）
+        if lyricist is None or composer is None:
+            if len(content) < 80:
+                for k in _both_keys_colon:
+                    m = re.search(r'(?:' + k + r')\s*[:：]\s*(\S.*)$', content)
+                    if m:
+                        break
+                else:
+                    m = None
+                if not m:
+                    for k in _both_keys_free:
+                        m = re.search(r'(?:' + k + r')\s*[:：]?\s*(\S.*)$', content)
+                        if m:
+                            break
+                if m:
+                    v = _clean(m.group(1))
+                    if v and len(v) < 60:
+                        if lyricist is None:
+                            lyricist = v
+                        if composer is None:
+                            composer = v
         if lyricist is None:
             v = _find(lyric_keys, content)
             if v and len(v) < 200:
