@@ -271,8 +271,10 @@
         // 搜索前确认已配置音乐平台 Cookie（空白则引导去登录）；不阻塞已有 Cookie 的用户
         if (typeof _ensureSearchCookies === 'function' && !(await _ensureSearchCookies())) return;
         let v2Mode = v2Toggle && v2Toggle.checked;
-        // 双保险：≥500 首强制走 v2（同步模式一次性 fetch 会卡死在"准备查询"，且无取消能力）
-        if (songs.length >= 500 && v2Toggle) {
+        // 双保险：≥50 首强制走 v2（同步模式一次性 fetch 会卡死在"准备查询"，且无取消能力）。
+        // v4.29.4 把阈值从 500 降到 50：用户手动输入 322 首时走了同步模式，
+        // 单次 fetch 挂 30-60 分钟表现为"一直卡在准备查询"（v1 模式设计上只适合小批量）
+        if (songs.length >= 50 && v2Toggle) {
             v2Toggle.checked = true;
             v2Toggle.disabled = true;
             v2Mode = true;
