@@ -799,6 +799,18 @@
         });
     }
 
+    // v4.29.5：手动刷新按钮——立即拉一次状态+增量结果（与自动轮询同一链路）
+    const v2RefreshBtn = document.getElementById('v2RefreshBtn');
+    if (v2RefreshBtn) {
+        v2RefreshBtn.addEventListener('click', async function () {
+            if (!v2CurrentTaskId) return;
+            v2RefreshBtn.textContent = '刷新中…';
+            await pollV2Tick();
+            v2RefreshBtn.textContent = '✓ 已刷新';
+            setTimeout(() => { v2RefreshBtn.textContent = '🔄 刷新'; }, 1200);
+        });
+    }
+
     function formatEta(sec) {
         if (sec == null) return '—';
         if (sec < 60) return sec + '秒';
