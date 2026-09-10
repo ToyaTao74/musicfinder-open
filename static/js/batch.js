@@ -348,6 +348,7 @@
     let v2PollTimer = null;
     let v2CurrentTaskId = null;
     let v2CurrentStatus = null;
+    let v2SwitcherBound = false;   // 任务切换下拉的 change 事件只绑定一次
     // v4.27.7 实时追加：上次拉到的最大 idx（增量拉取用）+ 已渲染行数（性能控制）
     let v2LastMaxIdx = -1;
     let v2TotalRendered = 0;
@@ -727,36 +728,67 @@
             // v4.27.7：始终展开面板（用户在批量页能看到自己所有任务的结果），
             // 不再因 done=total 收起 —— 那正是用户最想看的东西。
             v2Dashboard.hidden = false;
-            v2CurrentTaskId = target.id;
-            v2TaskName.textContent = target.name || '—';
-            v2TaskId.textContent = target.id;
-            v2Total.textContent = target.total || 0;
-            v2Done.textContent = target.done || 0;
-            v2Failed.textContent = target.failed || 0;
-            v2Pct.textContent = (target.progress_pct || 0) + '%';
-            v2BarFill.style.width = (target.progress_pct || 0) + '%';
-            v2Speed.textContent = '—'; v2Eta.textContent = '—';
-            v2StatusDot.className = 'v2-status-dot ' + (target.status || 'pending');
-            v2StatusText.textContent = '正在加载任务详情…';
-            v2Errors.hidden = true; v2ErrorsBody.innerHTML = '';
-            v2ExportBtn.disabled = (target.done || 0) > 0 ? false : true;
-            // 重置实时表格（确保切到新任务时不会残留旧任务的行）
-            v2LastMaxIdx = -1;
-            v2TotalRendered = 0;
-            if (v2RecentBody) {
-                v2RecentBody.innerHTML = '<tr><td colspan="7" class="v2-recent-empty">加载中…</td></tr>';
-            }
-            // 取消按钮只在运行中显示
-            const isRun = target.status === 'running' || target.status === 'pending';
-            if (isRun) {
-                v2CancelBtn.disabled = false;
-                v2CancelBtn.style.display = '';
-            } else {
-                v2CancelBtn.style.display = 'none';
-            }
-            // 始终轮询（让 completed 任务也能加载全部结果）
-            startV2Polling();
+            applyV2Task(target);
+            populateV2Switcher(list, target.id);
         } catch (e) { /* 静默：v2-dashboard 占位已展开，不会让页面"什么都没有" */ }
+    }
+
+    // ── v4.29.5：v2 任务切换器（用户要求自由查看历史/进行中批量任务）──
+
+    // 渲染指定任务的 dashboard 头部/状态/按钮（结果表格由轮询按 v2CurrentTaskId 拉取）
+    function applyV2Task(target) {
+        v2Dashboard.hidden = false;
+        v2CurrentTaskId = target.id;
+        v2TaskName.textContent = target.name || '—';
+        v2TaskId.textContent = target.id;
+        v2Total.textContent = target.total || 0;
+        v2Done.textContent = target.done || 0;
+        v2Failed.textContent = target.failed || 0;
+        v2Pct.textContent = (target.progress_pct || 0) + '%';
+        v2BarFill.style.width = (target.progress_pct || 0) + '%';
+        v2Speed.textContent = '—'; v2Eta.textContent = '—';
+        v2StatusDot.className = 'v2-status-dot ' + (target.status || 'pending');
+        v2StatusText.textContent = '正在加载任务详情…';
+        v2Errors.hidden = true; v2ErrorsBody.innerHTML = '';
+        v2ExportBtn.disabled = (target.done || 0) > 0 ? false : true;
+        // 重置实时表格（确保切到新任务时不会残留旧任务的行）
+        v2LastMaxIdx = -1;
+        v2TotalRendered = 0;
+        if (v2RecentBody) {
+            v2RecentBody.innerHTML = '<tr><td colspan="7" class="v2-recent-empty">加载中…</td></tr>';
+        }
+        // 取消按钮只在运行中显示
+        const isRun = target.status === 'running' || target.status === 'pending';
+        if (isRun) {
+            v2CancelBtn.disabled = false;
+            v2CancelBtn.style.display = '';
+        } else {
+            v2CancelBtn.style.display = 'none';
+        }
+        // 始终轮询（让 completed 任务也能加载全部结果）
+        startV2Polling();
+    }
+
+    // 任务下拉切换器：列出全部历史/进行中任务，选中即切视图
+    let v2TaskCache = [];
+    function populateV2Switcher(list, currentId) {
+        const sel = document.getElementById('v2TaskSwitcher');
+        if (!sel) return;
+        v2TaskCache = list;
+        const statusLabel = { running: '运行中', pending: '排队中', completed: '已完成', cancelled: '已取消', failed: '失败' };
+        sel.innerHTML = list.map(t => {
+            const st = statusLabel[t.status] || t.status || '';
+            const pct = t.progress_pct != null ? ` ${t.progress_pct}%` : '';
+            return `<option value="${t.id}">#${t.id} ${esc(t.name || '')}（${st}${pct}）</option>`;
+        }).join('');
+        sel.value = String(currentId);
+        if (!v2SwitcherBound) {
+            v2SwitcherBound = true;
+            sel.addEventListener('change', () => {
+                const t = v2TaskCache.find(x => String(x.id) === sel.value);
+                if (t) applyV2Task(t);
+            });
+        }
     }
 
     if (v2ExportBtn2) {
