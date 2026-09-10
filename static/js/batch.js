@@ -779,7 +779,8 @@
         sel.innerHTML = list.map(t => {
             const st = statusLabel[t.status] || t.status || '';
             const pct = t.progress_pct != null ? ` ${t.progress_pct}%` : '';
-            return `<option value="${t.id}">#${t.id} ${esc(t.name || '')}（${st}${pct}）</option>`;
+            // 注意：本文件里是 escapeHtml（esc 在 monitor.js，跨文件不可用——首次实现踩坑）
+            return `<option value="${t.id}">#${t.id} ${escapeHtml(t.name || '')}（${st}${pct}）</option>`;
         }).join('');
         sel.value = String(currentId);
         if (!v2SwitcherBound) {
