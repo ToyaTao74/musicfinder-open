@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.29.3'
+APP_VERSION        = '4.30.0'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.29.3 歌词词曲解析扩充：填词/繁体（作詞·詞·編曲）/词曲合署/Written by/Songwriter/原词原曲/Text'
-APP_VERSION_DATE   = '2026-09-10'
+APP_VERSION_NAME   = 'v4.30.0 批量任务引擎大修：执行引擎常开（修复任务创建后无人执行）/强制实时进度模式（彻底告别卡在准备查询）/任务切换器/手动刷新/发布时间列三平台/QQ下架误判修复/歌词词曲解析扩充'
+APP_VERSION_DATE   = '2026-09-11'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -5331,11 +5331,13 @@ def _performer_is_alias(perf, res_perf):
     """判断 res_perf 是否是 perf 的已知变体（同艺人不同账号）。
 
     返回 True / False；perf / res_perf 为空或 perf 不在白名单里都返回 False。
-    picker 仅在外部已调用 _load_performer_aliases() 后才有效；启动期 _autoload
-    触发后整个进程内一致可用。
+    内部惰性加载白名单，任何调用路径（Web 服务、批量脚本、独立 CLI）都可直接使用
+    ——v4.29.4 修复：此前依赖外部先调 _load_performer_aliases()，独立脚本直接
+    调用 _pick_best_for_batch 会抛 NameError: _PERFORMER_ALIASES。
     """
     if not perf or not res_perf:
         return False
+    _load_performer_aliases()
     aliases = _PERFORMER_ALIASES.get(perf)
     if not aliases:
         return False
@@ -5344,6 +5346,7 @@ def _performer_is_alias(perf, res_perf):
 
 def _all_performer_aliases():
     """只读快照：返回 {base: sorted_aliases} 供 admin 端点回传。"""
+    _load_performer_aliases()
     return {k: sorted(v) for k, v in _PERFORMER_ALIASES.items()}
 
 
