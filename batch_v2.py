@@ -22,6 +22,7 @@ import random
 import sqlite3
 import threading
 import concurrent.futures
+from contextlib import closing
 from datetime import datetime
 from flask import request, jsonify
 
@@ -337,7 +338,7 @@ class _BatchV2Engine:
         raise last_err
 
     def _init_db(self):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             c.executescript('''
                 CREATE TABLE IF NOT EXISTS tasks (
                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -449,7 +450,7 @@ class _BatchV2Engine:
         if not songs:
             raise ValueError('songs 不能为空')
         now = time.time()
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             c.execute('BEGIN')
             try:
                 c.execute(
@@ -475,7 +476,7 @@ class _BatchV2Engine:
 
     def _kickoff_task(self, task_id):
         """把任务里所有项重新分发：QQ/酷狗 走快速池，网易云 走慢速池。"""
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             row = c.execute(
                 "SELECT status FROM tasks WHERE id=?", (task_id,)
             ).fetchone()
@@ -557,7 +558,7 @@ class _BatchV2Engine:
 
     def _process_item(self, task_id, item_id, sweep=False):
         """阶段1（QQ/酷狗）。sweep=True 表示这是补跑，只补还没拿到的那个平台。"""
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             row = c.execute(
                 "SELECT * FROM task_items WHERE id=?", (item_id,)
             ).fetchone()
@@ -595,7 +596,7 @@ class _BatchV2Engine:
             # v4.25.16：补跑阶段「这歌所有平台都已 resolved」也算被处理过，刷 last_touched_at
             # 让 UI「最近查到的歌」面板能看到后台仍在动（否则 sweeper 静默无事可做时面板定格）。
             try:
-                with self._db_lock, self._connect() as c:
+                with self._db_lock, closing(self._connect()) as c:
                     c.execute("UPDATE task_items SET last_touched_at=? WHERE id=?",
                               (time.time(), item_id))
             except Exception:
@@ -726,7 +727,7 @@ class _BatchV2Engine:
                     updates[p + '_done'] = 1   # 总尝试到顶仍未确认 → 放弃，留 NULL（未确认）
                 # 否则不置 done → 补跑线程下次再确认
 
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             sets = ', '.join(f"{k}=?" for k in updates.keys())
             c.execute(f"UPDATE task_items SET {sets} WHERE id=?",
                       (*updates.values(), item_id))
@@ -795,7 +796,7 @@ class _BatchV2Engine:
                 self._fav_q[platform] = batch + self._fav_q[platform]
             return
 
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             for _ts, item_id, row in batch:
                 cnt = row.get('collection_count')
                 if cnt is None:
@@ -810,7 +811,7 @@ class _BatchV2Engine:
             self._fav_inflight -= {(platform, b[1]) for b in batch}
 
     def _mark_item_failed(self, item_id, err):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             c.execute(
                 "UPDATE task_items SET status='failed', last_error=?, finished_at=? WHERE id=?",
                 (err[:200], time.time(), item_id),
@@ -819,7 +820,7 @@ class _BatchV2Engine:
     def _requeue_item(self, item_id):
         """把因为进程退出而中断的歌退回队列，下次启动 _autorun_resume 会续跑。"""
         try:
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 c.execute(
                     "UPDATE task_items SET status='pending', last_error='中断，已重新排队' "
                     "WHERE id=? AND status<>'done'", (item_id,)
@@ -843,7 +844,7 @@ class _BatchV2Engine:
             # 收尾：把「已跑干净、连续多轮补跑无新进展」的任务标记 completed，
             # 剩余 NULL 收藏量全部填 0（真没收录=0 收藏量），网页上的「已完成」才是真话。
             try:
-                with self._db_lock, self._connect() as c:
+                with self._db_lock, closing(self._connect()) as c:
                     tids = [r[0] for r in c.execute(
                         "SELECT id FROM tasks WHERE status='running'").fetchall()]
                 for tid in tids:
@@ -891,7 +892,7 @@ class _BatchV2Engine:
                 return
         except Exception:
             pass
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             busy = c.execute(
                 "SELECT 1 FROM task_items ti JOIN tasks t ON t.id=ti.task_id "
                 "WHERE ti.status='pending' AND t.status='running' LIMIT 1"
@@ -923,7 +924,7 @@ class _BatchV2Engine:
             ORDER BY ti.id
             LIMIT ?
         '''
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             rows = c.execute(sql, (limit,)).fetchall()
         if not rows:
             return
@@ -960,7 +961,7 @@ class _BatchV2Engine:
         ORPHAN_MAX_TRIES 次，仍拒收则放弃（保留残缺，不写脏数据）。
         """
         targets = []
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             for p in ('qq', 'kugou'):
                 if self.gate.is_cooling(p):
                     continue          # 平台在冷却就别凑热闹
@@ -1002,7 +1003,7 @@ class _BatchV2Engine:
 
     def _sweep_orphan_item(self, task_id, item_id, platform):
         """残缺行重审单首：重搜该平台，接受即填 url（保留收藏量），拒收累计 tries。"""
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             row = c.execute("SELECT * FROM task_items WHERE id=?", (item_id,)).fetchone()
             if not row:
                 return
@@ -1024,7 +1025,7 @@ class _BatchV2Engine:
             return
         best, label = self.app_module._pick_best_for_batch(
             res, platform, song, perf, lyr, comp, self._enrich_for_4d)
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             tries = (item.get(platform + '_tries') or 0) + 1
             if best and (label or '').startswith(('精准匹配', '匹配(')):
                 url = (best.get('song_url') or best.get('link') or '').strip()
@@ -1244,7 +1245,7 @@ class _BatchV2Engine:
         if row.get('netease_done') and (row.get('netease_confirms') or 0) >= 2:
             return                      # 已确认未收录，别再跑
         # 任务已取消则不再补网易云
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             t = c.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()
             if t and t['status'] == 'cancelled':
                 return
@@ -1290,7 +1291,7 @@ class _BatchV2Engine:
                     or _label.startswith('存疑')
                 )
                 if _is_fallback:
-                    with self._db_lock, self._connect() as c:
+                    with self._db_lock, closing(self._connect()) as c:
                         c.execute(
                             "UPDATE task_items SET netease_url='', netease_favorites=NULL, "
                             "netease_done=1, netease_confirms=2, netease_error=?, netease_match=?, "
@@ -1316,7 +1317,7 @@ class _BatchV2Engine:
                     if not b: return ''
                     return (b.get('song_url') or b.get('link') or '') or ''
                 err = None
-                with self._db_lock, self._connect() as c:
+                with self._db_lock, closing(self._connect()) as c:
                     c.execute(
                         "UPDATE task_items SET netease_url=?, netease_favorites=?, "
                         "netease_done=1, netease_confirms=2, netease_error=?, netease_match=?, "
@@ -1329,17 +1330,17 @@ class _BatchV2Engine:
         # 本轮多次重试后仍空。判断是否撞了限流：
         if blocked_seen:
             # 这一轮在限流窗口里 → 重置确认计数，留待后续补跑再做第 2 次确认
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 c.execute("UPDATE task_items SET netease_done=0, netease_confirms=0, "
                           "last_touched_at=? WHERE id=?", (time.time(), item_id,))
             tries = (row.get('netease_tries') or 0) + 1
             if tries < ABSOLUTE_MAX_TRIES:
-                with self._db_lock, self._connect() as c:
+                with self._db_lock, closing(self._connect()) as c:
                     c.execute("UPDATE task_items SET netease_tries=? WHERE id=?", (tries, item_id))
                 self.ne_executor.submit(self._process_netease_safe, task_id, item_id)
             else:
                 # 总上限到了仍确认不了 → 放弃，留 NULL（未确认/可能限流）
-                with self._db_lock, self._connect() as c:
+                with self._db_lock, closing(self._connect()) as c:
                     c.execute("UPDATE task_items SET netease_done=1, netease_confirms=0, "
                               "last_touched_at=? WHERE id=?",
                               (time.time(), item_id,))
@@ -1348,7 +1349,7 @@ class _BatchV2Engine:
         confirms = (row.get('netease_confirms') or 0) + 1
         if confirms >= 2:
             # 两次干净空结果 → 确认未收录，收藏量留 NULL 不填 0
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 c.execute(
                     "UPDATE task_items SET netease_done=1, netease_confirms=2, "
                     "netease_error='netease: 两次空结果确认未收录', last_touched_at=? WHERE id=?",
@@ -1356,18 +1357,18 @@ class _BatchV2Engine:
         else:
             # 还需第 2 次确认 → 自我重投一次（受 ABSOLUTE 总上限约束）
             tries = (row.get('netease_tries') or 0) + 1
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 c.execute("UPDATE task_items SET netease_done=0, netease_tries=?, "
                           "last_touched_at=? WHERE id=?", (tries, time.time(), item_id))
             if tries < ABSOLUTE_MAX_TRIES:
                 self.ne_executor.submit(self._process_netease_safe, task_id, item_id)
             else:
-                with self._db_lock, self._connect() as c:
+                with self._db_lock, closing(self._connect()) as c:
                     c.execute("UPDATE task_items SET netease_done=1, last_touched_at=? WHERE id=?",
                               (time.time(), item_id,))
 
     def _mark_netease_done(self, item_id, err):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             c.execute(
                 "UPDATE task_items SET netease_done=1, netease_error=?, last_touched_at=? WHERE id=?",
                 (err, time.time(), item_id),
@@ -1375,20 +1376,20 @@ class _BatchV2Engine:
 
     def _task_cancelled(self, task_id):
         try:
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 r = c.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()
             return bool(r) and r['status'] == 'cancelled'
         except Exception:
             return False
 
     def _get_item(self, item_id):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             row = c.execute("SELECT * FROM task_items WHERE id=?", (item_id,)).fetchone()
             return dict(row) if row else None
 
     def _on_item_finished(self, task_id, ok):
         """每首完成后更新任务计数器；done+failed==total 时标记完成。"""
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             if ok:
                 c.execute("UPDATE tasks SET done=done+1 WHERE id=?", (task_id,))
             else:
@@ -1403,7 +1404,7 @@ class _BatchV2Engine:
 
     # ─── 查询 ───
     def get_status(self, task_id):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             t = c.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
             if not t:
                 return None
@@ -1517,7 +1518,7 @@ class _BatchV2Engine:
         return st
 
     def list_tasks(self, limit=50):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             rows = c.execute(
                 "SELECT * FROM tasks ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
@@ -1529,7 +1530,7 @@ class _BatchV2Engine:
         Raises KeyError 当任务不存在。
         """
         status_filt = "AND status IN ('done','failed')" if include == 'all' else "AND status='done'"
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             t = c.execute(
                 "SELECT id, status, total, done, failed FROM tasks WHERE id=?", (task_id,)
             ).fetchone()
@@ -1565,7 +1566,7 @@ class _BatchV2Engine:
         }
 
     def cancel(self, task_id):
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             c.execute(
                 "UPDATE tasks SET status='cancelled', finished_at=COALESCE(finished_at, ?) "
                 "WHERE id=? AND status IN ('pending','running')",
@@ -1600,7 +1601,7 @@ class _BatchV2Engine:
         """
         transient_pattern = "%unable to open database%"
         locked_pattern = "%database is locked%"
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             # ① 先看下总量
             all_failed = c.execute(
                 "SELECT COUNT(*) FROM task_items WHERE task_id=? AND status='failed'",
@@ -1694,7 +1695,7 @@ class _BatchV2Engine:
                     f'( {match_c} IS NULL OR ({match_c} NOT LIKE "%未收录%" AND {match_c} NOT LIKE "%低相关%") ) )'
                 )
             conds = ' OR '.join(parts)
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             rows = c.execute(
                 f"SELECT id, idx, " + ','.join(target_cols) +
                 f" FROM task_items WHERE task_id=? AND status='done' AND ({conds})",
@@ -1766,7 +1767,7 @@ class _BatchV2Engine:
           ① 任务处于 running；② 没有 pending 行在跑；③ 收藏量合批队列已空；
           ④ 各平台都不在熔断冷却；⑤ 连续 FINALIZE_STABLE_SWEEPS 轮补跑无新进展。
         """
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             t = c.execute(
                 "SELECT id,status,total,done,finalized FROM tasks WHERE id=?",
                 (task_id,)).fetchone()
@@ -1780,14 +1781,14 @@ class _BatchV2Engine:
                 (task_id,)).fetchone()[0]
         if unresolved == 0:
             # 三平台都已 resolved（有数据 or 确认未收录，均不填 0），干净收尾
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 c.execute(
                     "UPDATE tasks SET status='completed', finished_at=?, finalized=1 WHERE id=?",
                     (time.time(), task_id))
             print(f'[batch_v2] 任务 #{task_id} 已全部跑完（含确认未收录的歌，均留 NULL 不填 0），标记完成')
             self._finalize_state.pop(task_id, None)
             return
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             pending = c.execute(
                 "SELECT COUNT(*) FROM task_items WHERE task_id=? AND status='pending'",
                 (task_id,)).fetchone()[0]
@@ -1812,7 +1813,7 @@ class _BatchV2Engine:
             # 补跑连续 N 轮无进展且平台未限流 → 剩余 unresolved 多为「撞总上限放弃」的歌
             # （它们留 NULL，导出也是 null，界面会单独标记「未确认/可能限流」）。
             # 这里只标记完成，绝不把未搜到的歌填成 0。
-            with self._db_lock, self._connect() as c:
+            with self._db_lock, closing(self._connect()) as c:
                 c.execute(
                     "UPDATE tasks SET status='completed', finished_at=?, finalized=1 WHERE id=?",
                     (time.time(), task_id))
@@ -1829,7 +1830,7 @@ class _BatchV2Engine:
         2. status='completed' 但网易云没补完的任务 —— 网易云是独立的慢速第二阶段，
            2 万首规模下要跑一两个小时，中途重启/休眠很容易正好卡在这个窗口。
         """
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             # ① 先把「上次进程被打断」而误判为 failed 的歌退回队列。
             #    这类失败跟数据无关（线程池在解释器关闭时抛的，或 SQLite 锁竞争瞬时错），
             #    不退回就永久丢。
@@ -1874,7 +1875,7 @@ class _BatchV2Engine:
         的缺口行 retryable 逻辑反复重试，直到限流解除借名补回。
         """
         marker = 'autofix_v4255'
-        with self._db_lock, self._connect() as c:
+        with self._db_lock, closing(self._connect()) as c:
             c.execute("CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT)")
             if c.execute("SELECT 1 FROM kv WHERE key=?", (marker,)).fetchone():
                 return
@@ -2071,6 +2072,30 @@ def register(app, start_workers=True):
     def api_batch_v2_cancel(task_id):
         engine.cancel(task_id)
         return jsonify({'ok': True})
+
+    # ─── 删除/清理（v4.30.2：任务列表管理）───
+    @app.route('/api/batch_v2_delete/<int:task_id>', methods=['POST'])
+    def api_batch_v2_delete(task_id):
+        t = engine.get_status(task_id)
+        if not t:
+            return jsonify({'ok': False, 'error': '任务不存在'}), 404
+        if t.get('status') in ('running', 'pending'):
+            return jsonify({'ok': False, 'error': '任务进行中，请先取消再删除'}), 400
+        with engine._db_lock, closing(engine._connect()) as c:
+            c.execute('DELETE FROM task_items WHERE task_id = ?', (task_id,))
+            c.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+        return jsonify({'ok': True, 'deleted': task_id})
+
+    @app.route('/api/batch_v2_cleanup', methods=['POST'])
+    def api_batch_v2_cleanup():
+        """一键清理：删除所有非运行中/排队中的历史任务（含结果明细）。"""
+        with engine._db_lock, closing(engine._connect()) as c:
+            rows = c.execute("SELECT id FROM tasks WHERE status NOT IN ('running','pending')").fetchall()
+            ids = [r['id'] for r in rows]
+            for tid in ids:
+                c.execute('DELETE FROM task_items WHERE task_id = ?', (tid,))
+                c.execute('DELETE FROM tasks WHERE id = ?', (tid,))
+        return jsonify({'ok': True, 'deleted': ids})
 
     # ─── 重试 failed ───
     # 把任务的 failed 行重新入 pending 队列并立即启动。

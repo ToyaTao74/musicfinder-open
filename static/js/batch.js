@@ -889,6 +889,27 @@
         });
     }
 
+    // v4.30.2：一键清理历史任务（删除所有已完成/已取消任务及其结果）
+    const v2CleanupBtn = document.getElementById('v2CleanupBtn');
+    if (v2CleanupBtn) {
+        v2CleanupBtn.addEventListener('click', async function () {
+            if (!confirm('删除所有已完成/已取消的历史批量任务（含结果数据）？\n进行中/排队中的任务不受影响。')) return;
+            v2CleanupBtn.textContent = '清理中…';
+            try {
+                const resp = await fetch('/api/batch_v2_cleanup', { method: 'POST' });
+                const d = await resp.json();
+                if (!d.ok) throw new Error(d.error || '清理失败');
+                v2CleanupBtn.textContent = `已清理 ${ (d.deleted || []).length } 个`;
+                // 重新加载任务列表与面板（选中最新的进行中任务）
+                await autoLoadRunningTask();
+            } catch (e) {
+                alert('清理失败：' + e.message);
+            } finally {
+                setTimeout(() => { v2CleanupBtn.textContent = '🗑 清理历史'; }, 1500);
+            }
+        });
+    }
+
     function formatEta(sec) {
         if (sec == null) return '—';
         if (sec < 60) return sec + '秒';
