@@ -163,6 +163,15 @@
                     <div class="field-group">
                         <label class="field-label">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            歌手名
+                        </label>
+                        <input type="text" id="performer" class="field-input" placeholder="例如：周杰伦（可选）" autocomplete="off">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                 <polyline points="14 2 14 8 20 8"/>
                             </svg>
@@ -178,15 +187,6 @@
                             曲作者
                         </label>
                         <input type="text" id="composer" class="field-input" placeholder="例如：周杰伦（可选）" autocomplete="off">
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                            </svg>
-                            表演者
-                        </label>
-                        <input type="text" id="performer" class="field-input" placeholder="例如：周杰伦（可选）" autocomplete="off">
                     </div>
                 </div>
                 <div class="search-options">
@@ -541,7 +541,7 @@
                 </div>
             </div>
 
-            <textarea id="songInput" class="song-input" placeholder="因为有你,张蔷&#10;秋天的玫瑰,张蔷&#10;空白,张蔷&#10;潇洒地走,张蔷"></textarea>
+            <textarea id="songInput" class="song-input" placeholder="歌名,歌手,词作者,曲作者（后两项可选）&#10;因为有你,张蔷&#10;秋天的玫瑰,张蔷,李偲菘,李伟菘&#10;空白,张蔷"></textarea>
 
             <div style="margin-top:6px;font-size:12px;color:#8a93a6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <span>列顺序（按你表格的列序填写，留空=自动识别）：</span>
@@ -917,7 +917,7 @@
                 </div>
             </div>
 
-            <textarea id="plSongInput" class="song-input" placeholder="晴天,周杰伦&#10;稻香,周杰伦"></textarea>
+            <textarea id="plSongInput" class="song-input" placeholder="歌名,歌手,词作者,曲作者（后两项可选）&#10;晴天,周杰伦,方文山,周杰伦"></textarea>
 
             <div class="input-foot">
                 <div class="parse-info">
