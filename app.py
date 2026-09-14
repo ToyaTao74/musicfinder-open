@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.2'
+APP_VERSION        = '4.30.3'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.2 修复批量引擎 SQLite 连接泄漏（长跑数小时不再假死/RESET）+ 任务清理按钮 + 序号列自动剥离 + 列顺序模板 + 标记归属转移'
+APP_VERSION_NAME   = 'v4.30.3 修复 Windows 浏览器登录诊断盲区：新增文件日志（~/.musicfinder/logs/app.log），登录每一步可追踪'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -98,6 +98,18 @@ COMMON_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 
 # Cookie 存储：优先用户可写目录（打包后 .app 内部只读），打包内 cookies.json 作为只读默认
 COOKIE_DIR = os.path.expanduser('~/.musicfinder')
 COOKIE_FILE = os.path.join(COOKIE_DIR, 'cookies.json')
+
+# v4.30.3：文件日志（Windows 便携版双击运行看不到 stderr，错误曾无声消失——
+# 全部落到 ~/.musicfinder/logs/app.log，出问题让用户发这个文件即可定位）
+try:
+    _log_dir = os.path.join(COOKIE_DIR, 'logs')
+    os.makedirs(_log_dir, exist_ok=True)
+    _fh = logging.FileHandler(os.path.join(_log_dir, 'app.log'), encoding='utf-8')
+    _fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+    logger.addHandler(_fh)
+    logger.setLevel(logging.INFO)
+except Exception:
+    pass
 BUNDLED_COOKIE_FILE = os.path.join(BUNDLE_DIR, 'cookies.json')
 
 # 网易云收藏量(红心数) 走 eapi 加密接口，Python 标准库无 AES，改用 Node 脚本
@@ -1522,6 +1534,7 @@ def run_browser_login(platform, timeout=360, target='cookies'):
     result = {'success': False, 'message': '登录超时，请重试', 'cookie': '', 'count': 0}
     p = None
     browser = None
+    logger.info(f'[login] 开始平台={platform} target={target} FROZEN={FROZEN} BUNDLE_DIR={BUNDLE_DIR}')
     try:
         # 打包环境：Windows 浏览器已烤进包（零下载）；macOS 若本机无 Chrome 则按需下载到
         # 用户级缓存。下载过程中通过 on_status 实时回传状态，慢网也不像卡死。
@@ -1532,6 +1545,7 @@ def run_browser_login(platform, timeout=360, target='cookies'):
                 if isinstance(st, dict):
                     st['message'] = m
             ok, msg = ensure_playwright_chromium(timeout=120, on_status=_on_prep)
+            logger.info(f'[login] 浏览器就绪检查: ok={ok} msg={msg}')
             if not ok:
                 return {'success': False, 'message': f'浏览器未就绪：{msg}。可改用「打开登录页」手动复制 Cookie', 'cookie': '', 'count': 0}
         p = sync_playwright().start()
@@ -1542,13 +1556,17 @@ def run_browser_login(platform, timeout=360, target='cookies'):
         browser = None
         for _ch in ('chrome', 'msedge', None):
             try:
+                _t0 = time.time()
                 browser = (p.chromium.launch(headless=False, channel=_ch)
                            if _ch else p.chromium.launch(headless=False))
+                logger.info(f'[login] 浏览器启动成功 channel={_ch or "bundled"} 耗时={time.time()-_t0:.1f}s')
                 break
             except Exception as _e:
                 launch_errs.append(f"{_ch or '内置Chromium'}: {str(_e)[:120]}")
+                logger.warning(f'[login] channel={_ch or "bundled"} 启动失败: {str(_e)[:200]}')
         if browser is None:
             detail = '；'.join(launch_errs)
+            logger.error(f'[login] 全部浏览器启动失败: {detail[:300]}')
             hint = ''
             if 'Executable' in detail or 'BrowserType' in detail:
                 hint = '。常见原因：便携版需完整解压到不含中文/空格的路径（如 D:\\MusicFinder）后再运行'
