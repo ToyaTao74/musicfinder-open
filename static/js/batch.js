@@ -636,12 +636,15 @@
             // 终态：隐藏取消按钮（而非置灰禁用 —— 用户视角：禁用按钮"点不动"体验极差）
             v2CancelBtn.style.display = 'none';
             v2CancelBtn.disabled = false;
-            if (v2RetryEmptyBtn) { v2RetryEmptyBtn.style.display = ''; v2RetryEmptyBtn.disabled = false; }  // 终态可补跑
+            if (v2RetryEmptyBtn) { v2RetryEmptyBtn.style.display = ''; v2RetryEmptyBtn.disabled = false; v2RetryEmptyBtn.title = '把没查到收藏量的歌重新跑一遍'; }  // 终态可补跑
             if (v2ExportBtn2) v2ExportBtn2.style.display = '';  // 显示底部导出按钮
             if (!nePending) stopV2Polling();
         } else if (s.status === 'running') {
-            // 运行中按需禁用「重试未收录」（会让 worker 误入新歌抢线程）
-            if (v2RetryEmptyBtn) v2RetryEmptyBtn.disabled = true;
+            // 运行中按需禁用「重试未收录」（会让 worker 误入新歌抢线程）——按钮悬停给出原因
+            if (v2RetryEmptyBtn) {
+                v2RetryEmptyBtn.disabled = true;
+                v2RetryEmptyBtn.title = '任务运行中，等进度到 100% 后此按钮可用';
+            }
         }
     }
 
