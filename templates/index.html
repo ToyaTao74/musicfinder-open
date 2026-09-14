@@ -124,6 +124,12 @@
             </svg>
             <span>运营报告</span>
         </button>
+        <button class="tab-btn" data-tab="alias">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
+            <span>艺人别名</span>
+        </button>
     </nav>
 
     <!-- ═══ 搜索标签页 ═══ -->
@@ -989,6 +995,53 @@
         </div>
     </section>
 
+    <!-- ═══ 艺人别名标签页 ═══ -->
+    <section class="tab-content" id="tab-alias">
+        <style>
+            #tab-alias .alias-wrap{max-width:960px;margin:0 auto;}
+            #tab-alias h2{font-size:18px;color:#1c2433;margin:0 0 6px;}
+            #tab-alias .alias-desc{font-size:13px;color:#6b7280;line-height:1.7;margin-bottom:16px;}
+            #tab-alias .alias-card{background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(50,70,120,.08);padding:18px 22px;margin-bottom:18px;}
+            #tab-alias .alias-card h3{font-size:15px;color:#1c2433;margin:0 0 10px;}
+            #tab-alias table{width:100%;border-collapse:collapse;font-size:13px;}
+            #tab-alias th{text-align:left;color:#8a93a6;font-weight:600;padding:6px 8px;border-bottom:1px solid #eef0f5;}
+            #tab-alias td{padding:8px;border-bottom:1px solid #f4f5f8;color:#374151;}
+            #tab-alias .alias-add{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+            #tab-alias .alias-add input{flex:1;min-width:140px;padding:7px 10px;border:1px solid #e2e6ef;border-radius:8px;font-size:13px;}
+            #tab-alias .alias-add button{padding:7px 16px;border:none;border-radius:8px;background:#4f6ef7;color:#fff;font-size:13px;cursor:pointer;}
+            #tab-alias .alias-op{border:none;background:none;color:#4f6ef7;cursor:pointer;font-size:12px;text-decoration:underline;padding:2px 6px;}
+            #tab-alias .alias-op.del{color:#ef4444;}
+            #tab-alias .alias-empty{color:#9aa3b2;padding:12px 8px;text-align:center;}
+            #tab-alias .alias-evid{color:#9aa3b2;font-size:12px;}
+        </style>
+        <div class="alias-wrap">
+            <h2>🏷️ 艺人别名（改名 / 多平台写法）</h2>
+            <div class="alias-desc">
+                同一歌手<b>改名</b>或各平台<b>写法不同</b>时，在这里配置「基名 ↔ 变体」，搜索匹配会自动认回
+                （例：欧珈源 ↔ 声音玩具）。<br>
+                <b>自动发现</b>：搜索/批量过程中发现「歌名强匹配但艺人写法对不上」的候选，会自动出现在下方待确认列表——
+                确认即并入白名单，系统后续自动识别该歌手的新名字。
+            </div>
+            <div class="alias-card">
+                <h3>➕ 手动添加别名</h3>
+                <div class="alias-add">
+                    <input id="aliasBase" type="text" placeholder="基名（如：欧珈源）">
+                    <input id="aliasAlias" type="text" placeholder="变体（如：声音玩具）">
+                    <button id="aliasAddBtn" type="button">添加</button>
+                </div>
+            </div>
+            <div class="alias-card">
+                <h3>⚠️ 待确认候选（自动发现）</h3>
+                <table id="aliasSugTable"></table>
+            </div>
+            <div class="alias-card">
+                <h3>✅ 已生效白名单</h3>
+                <table id="aliasListTable"></table>
+            </div>
+        </div>
+    </section>
+
+
     {% include 'monitor.html' %}
 {% include 'evidence.html' %}
 
@@ -1038,6 +1091,7 @@
     </div>
 
 <script src="{{ url_for('static', filename='js/app.js', v='20260826a') }}"></script>
+<script src="{{ url_for('static', filename='js/alias.js') }}?v=20260914a"></script>
 <script src="{{ url_for('static', filename='js/batch.js') }}?v=20260914e"></script>
 <script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>
 <script src="{{ url_for('static', filename='js/playlist.js', v='20260826a') }}"></script>
