@@ -1451,19 +1451,33 @@ class _BatchV2Engine:
                    FROM task_items WHERE task_id=?""",
                 (task_id,),
             ).fetchone()
-        # 最近已拿到收藏量的歌（让用户实时看到「数据一条条进来」）。
-        # 注意：收藏量由异步工作者在搜索完成后补拉，刚搜完的歌这一刻 fav 还是 NULL，
-        # 所以只挑「至少在一个平台拿到收藏量」的，避免面板全是空值误导用户。
-        recent = c.execute(
-            "SELECT song_name, performer, qq_url, qq_favorites, kugou_url, "
-            "kugou_favorites, netease_url, netease_favorites, qq_match, "
-            "kugou_match, netease_match, last_touched_at, finished_at FROM task_items "
-            "WHERE task_id=? AND status='done' AND ("
-            "qq_favorites IS NOT NULL OR kugou_favorites IS NOT NULL "
-            "OR netease_favorites IS NOT NULL) "
-            "ORDER BY COALESCE(last_touched_at, finished_at, 0) DESC, idx DESC LIMIT 15",
-            (task_id,),
-        ).fetchall()
+            # 最近已拿到收藏量的歌（让用户实时看到「数据一条条进来」）。
+            # 注意：收藏量由异步工作者在搜索完成后补拉，刚搜完的歌这一刻 fav 还是 NULL，
+            # 所以只挑「至少在一个平台拿到收藏量」的，避免面板全是空值误导用户。
+            # v4.30.2 修复：recent/nxt/ongoing 三个查询必须在 with 块内执行——
+            # closing 会在 with 结束时关闭连接，块外再用 c 会抛 "Cannot operate
+            # on a closed database"（closing 泄漏修复暴露的历史隐藏依赖）。
+            recent = c.execute(
+                "SELECT song_name, performer, qq_url, qq_favorites, kugou_url, "
+                "kugou_favorites, netease_url, netease_favorites, qq_match, "
+                "kugou_match, netease_match, last_touched_at, finished_at FROM task_items "
+                "WHERE task_id=? AND status='done' AND ("
+                "qq_favorites IS NOT NULL OR kugou_favorites IS NOT NULL "
+                "OR netease_favorites IS NOT NULL) "
+                "ORDER BY COALESCE(last_touched_at, finished_at, 0) DESC, idx DESC LIMIT 15",
+                (task_id,),
+            ).fetchall()
+            nxt = c.execute(
+                "SELECT idx, song_name, performer FROM task_items "
+                "WHERE task_id=? AND status='pending' ORDER BY idx ASC LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            ongoing = c.execute(
+                "SELECT idx, song_name, performer FROM task_items "
+                "WHERE task_id=? AND status='pending' "
+                "ORDER BY COALESCE(started_at, 0) DESC, idx ASC LIMIT 5",
+                (task_id,),
+            ).fetchall()
         st = _row_to_task_status(t, errs, ne['tot'], ne['done'],
                                   fully_resolved=cov['fully_resolved'] or 0,
                                   still_unresolved=cov['still_unresolved'] or 0)
@@ -1471,20 +1485,9 @@ class _BatchV2Engine:
         # 用 status='pending' 的最小 idx —— 一目了然告诉用户「马上要查这首」。
         # 注意多 worker 并发时只是「队列顺序」不是「当前正在处理」，但用户视角看
         # 这个比"看 worker 内部状态"直观 100 倍。
-        nxt = c.execute(
-            "SELECT idx, song_name, performer FROM task_items "
-            "WHERE task_id=? AND status='pending' ORDER BY idx ASC LIMIT 1",
-            (task_id,),
-        ).fetchone()
         st['processing'] = dict(nxt) if nxt else None
         # 「正在跑」：5 个被 worker 最近 touch 过、还在 pending 的歌。
         # 多 worker 并发时最真实的"此刻正忙"。
-        ongoing = c.execute(
-            "SELECT idx, song_name, performer FROM task_items "
-            "WHERE task_id=? AND status='pending' "
-            "ORDER BY COALESCE(started_at, 0) DESC, idx ASC LIMIT 5",
-            (task_id,),
-        ).fetchall()
         st['ongoing'] = [dict(o) for o in ongoing]
         st['recent_rows'] = [dict(r) for r in recent]
         st['finalized'] = bool(t['finalized'])
