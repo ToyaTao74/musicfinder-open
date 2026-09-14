@@ -445,6 +445,14 @@
             const data = await resp.json();
             v2CurrentTaskId = data.task_id;
             showV2Dashboard(data);
+            // 同步任务切换器：新任务插到下拉最前并选中（否则下拉还停在上一次的选择）
+            const sw = document.getElementById('v2TaskSwitcher');
+            if (sw) {
+                [...sw.options].filter(o => o.value === String(data.task_id)).forEach(o => o.remove());
+                const opt = new Option(`#${data.task_id} ${data.name || ''}（运行中 0%）`, String(data.task_id));
+                sw.add(opt, sw.options[0] || null);
+                sw.value = String(data.task_id);
+            }
             startV2Polling();
         } catch (e) {
             alert('提交失败：' + e.message);
