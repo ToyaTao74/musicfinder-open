@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.3'
+APP_VERSION        = '4.30.4'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.3 修复 Windows 浏览器登录诊断盲区：新增文件日志（~/.musicfinder/logs/app.log），登录每一步可追踪'
+APP_VERSION_NAME   = 'v4.30.4 浏览器登录失败时诊断日志自动上云（远程排障，无需手动找日志文件）'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -1567,6 +1567,18 @@ def run_browser_login(platform, timeout=360, target='cookies'):
         if browser is None:
             detail = '；'.join(launch_errs)
             logger.error(f'[login] 全部浏览器启动失败: {detail[:300]}')
+            # v4.30.4：失败详情自动上云（远程排障）
+            try:
+                _log_tail = ''
+                _lf = os.path.join(COOKIE_DIR, 'logs', 'app.log')
+                if os.path.exists(_lf):
+                    with open(_lf, 'r', encoding='utf-8', errors='ignore') as f:
+                        _log_tail = ''.join(f.readlines()[-50:])
+                _push_diag_log(f'browser_launch_fail_{platform}',
+                               f'版本={APP_VERSION} FROZEN={FROZEN} BUNDLE_DIR={BUNDLE_DIR}\n'
+                               f'launch_errs={detail}\n--- app.log 尾部 ---\n{_log_tail}')
+            except Exception:
+                pass
             hint = ''
             if 'Executable' in detail or 'BrowserType' in detail:
                 hint = '。常见原因：便携版需完整解压到不含中文/空格的路径（如 D:\\MusicFinder）后再运行'
@@ -6238,6 +6250,27 @@ _marks_lock = threading.Lock()
 
 # ── 标记云端同步：本地优先 + 后台异步推送（避免云端慢拖垮本地打标） ──
 _cloud_push_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix='marks-cloud')
+
+
+def _push_diag_log(title, content):
+    """v4.30.4：诊断日志上云（datatype='diag_log'，远程排障用）——尽力而为，失败不影响本地。"""
+    try:
+        cb = _cloudbase_cfg()
+        if not cb:
+            return
+        import socket
+        payload = [{
+            'datatype': 'diag_log',
+            'mark_key': f'diag_{title}_{int(time.time()*1000)}',
+            'username': _cur_user() or 'legacy',
+            'song_name': f'[diag] {title}',
+            'note': (content or '')[:8000],
+            'data': {'title': str(title)[:200], 'content': (content or '')[:8000]},
+        }]
+        _cloudbase_call(cb, 'batch_upsert', payloads=payload)
+        logger.info(f'[diag] 诊断日志已上云: {title}')
+    except Exception as e:
+        logger.warning(f'[diag] 诊断日志上云失败（不影响本地）: {e}')
 
 
 def _push_marks_to_cloud(marks):
