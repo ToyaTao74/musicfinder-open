@@ -7786,36 +7786,85 @@ def api_patch_mark():
 
 @app.route('/api/artist_home', methods=['GET'])
 def api_artist_home():
-    """查歌手主页链接（登录即可）。platform=netease（网易云歌手搜索 type=100）。"""
+    """查歌手主页链接（登录即可）。支持 netease / qq / kugou / kuwo（qishui 暂无公开接口）。"""
     if not _cur_user():
         return jsonify({'error': '请先登录'}), 401
     name = (request.args.get('name') or '').strip()
     platform = (request.args.get('platform') or 'netease').strip()
     if not name:
         return jsonify({'error': '缺少歌手名'}), 400
-    if platform != 'netease':
-        return jsonify({'error': '该平台暂未支持，敬请期待'}), 400
+    if platform == 'qishui':
+        return jsonify({'ok': False, 'error': '汽水音乐暂无公开的歌手主页接口，敬请期待'}), 400
+    _ua = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    url = None
+    hit_name = None
     try:
-        import requests as _rq
-        r = _rq.post('https://music.163.com/api/search/get',
-                     data={'s': name, 'type': 100, 'limit': 5, 'offset': 0},
-                     timeout=12,
-                     headers={'User-Agent': COMMON_UA, 'Referer': 'https://music.163.com/'})
-        j = r.json() or {}
-        arts = (j.get('result') or {}).get('artists') or []
-        if not arts:
-            return jsonify({'ok': False, 'error': '未找到该歌手的主页'})
-        hit = None
-        for a in arts:
-            if (a.get('name') or '').strip() == name:
-                hit = a
-                break
-        if not hit:
-            hit = arts[0]
-        return jsonify({'ok': True,
-                        'url': f"https://music.163.com/#/artist?id={hit['id']}",
-                        'name': hit.get('name')})
+        if platform == 'netease':
+            import requests as _rq
+            j = (_rq.post('https://music.163.com/api/search/get',
+                          data={'s': name, 'type': 100, 'limit': 5, 'offset': 0},
+                          timeout=12,
+                          headers={'User-Agent': COMMON_UA, 'Referer': 'https://music.163.com/'}).json() or {})
+            arts = (j.get('result') or {}).get('artists') or []
+            hit = next((a for a in arts if (a.get('name') or '').strip() == name), arts[0] if arts else None)
+            if hit:
+                url = f"https://music.163.com/#/artist?id={hit['id']}"
+                hit_name = hit.get('name')
+        elif platform == 'qq':
+            import requests as _rq
+            j = (_rq.get('https://c.y.qq.com/soso/fcgi-bin/client_search_cp',
+                         params={'format': 'json', 'p': 1, 'n': 5, 'w': name},
+                         timeout=12, headers={**_ua, 'Referer': 'https://y.qq.com/'}).json() or {})
+            sl = (((j.get('data') or {}).get('song') or {}).get('list') or [])
+            for sg in sl:
+                sings = sg.get('singer') or []
+                if sings and (sings[0].get('name') or '').strip() == name:
+                    url = f"https://y.qq.com/n/ryqq/singer/{sings[0].get('mid')}"
+                    hit_name = sings[0].get('name')
+                    break
+            if not url and sl:
+                sings = sl[0].get('singer') or []
+                if sings:
+                    url = f"https://y.qq.com/n/ryqq/singer/{sings[0].get('mid')}"
+                    hit_name = sings[0].get('name')
+        elif platform == 'kugou':
+            import requests as _rq
+            j = (_rq.get('https://mobiles.kugou.com/api/v3/search/singer',
+                         params={'keyword': name, 'pagesize': 5, 'page': 1},
+                         timeout=12, headers=_ua).json() or {})
+            info = j.get('data') or []
+            hit = next((x for x in info if (x.get('singername') or '').strip() == name),
+                       info[0] if info else None)
+            if hit and hit.get('singerid'):
+                import requests as _rq
+                rr = _rq.get(f'https://m3ws.kugou.com/singer/info/{hit["singerid"]}.html',
+                             timeout=12, headers=_ua, allow_redirects=True)
+                if '/singer/info/' in rr.url:
+                    url = rr.url
+                    hit_name = hit.get('singername')
+        elif platform == 'kuwo':
+            import requests as _rq
+            import ast as _ast
+            r = _rq.get('https://search.kuwo.cn/r.s',
+                        params={'all': name, 'ft': 'artist', 'itemset': 'web',
+                                'client': 'kt', 'rformat': 'json', 'encoding': 'utf8'},
+                        timeout=12, headers=_ua)
+            j = _ast.literal_eval(r.text.strip())
+            hit = next((a for a in (j.get('abslist') or [])
+                        if (a.get('ARTIST') or '').strip() == name),
+                       None)
+            if not hit and (j.get('abslist') or []):
+                hit = j['abslist'][0]
+            if hit and hit.get('ARTISTID'):
+                url = f"https://www.kuwo.cn/singer_detail/{hit['ARTISTID']}"
+                hit_name = hit.get('ARTIST')
+        else:
+            return jsonify({'error': '未知平台'}), 400
+        if url:
+            return jsonify({'ok': True, 'url': url, 'name': hit_name or name, 'platform': platform})
+        return jsonify({'ok': False, 'error': '未找到该歌手的主页'})
     except Exception as e:
+        logger.exception('artist_home 查询失败 %s %s', platform, name)
         return jsonify({'error': str(e)[:200]}), 500
 
 @app.route('/api/marks/reassign_owner', methods=['POST'])
