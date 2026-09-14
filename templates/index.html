@@ -543,6 +543,15 @@
 
             <textarea id="songInput" class="song-input" placeholder="因为有你,张蔷&#10;秋天的玫瑰,张蔷&#10;空白,张蔷&#10;潇洒地走,张蔷"></textarea>
 
+            <div style="margin-top:6px;font-size:12px;color:#8a93a6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>列顺序（按你表格的列序填写，留空=自动识别）：</span>
+                <input id="colOrderInput" type="text" placeholder="如：序号,歌名,演唱者,词曲,忽略"
+                       style="flex:1;min-width:260px;padding:5px 10px;border:1px solid #e2e6ef;border-radius:8px;font-size:12px;"
+                       title="用逗号写每列的含义，支持：序号 / 歌名 / 演唱者(歌手) / 词 / 曲 / 词曲(同人) / 忽略&#10;例：你的表是「序号 歌名 词曲作者 演唱者」就填：序号,歌名,词曲,演唱者&#10;配置会自动保存，以后粘贴的文本都按这个顺序解析">
+                <button id="colOrderApply" type="button"
+                        style="padding:5px 12px;border:1px solid #e2e6ef;border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">应用</button>
+            </div>
+
             <div class="input-foot">
                 <div class="parse-info">
                     已识别 <span id="songCount" class="count-badge">0</span> 首
@@ -1028,7 +1037,7 @@
     </div>
 
 <script src="{{ url_for('static', filename='js/app.js', v='20260826a') }}"></script>
-<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260914a"></script>
+<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260914b"></script>
 <script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>
 <script src="{{ url_for('static', filename='js/playlist.js', v='20260826a') }}"></script>
 <script src="{{ url_for('static', filename='js/monitor.js', v='20260815d') }}"></script>

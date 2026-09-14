@@ -82,6 +82,39 @@
     let lastResults = null; // 用于下载
 
     // ── 解析输入为歌单数组 ──
+    // ── v4.30.2：列顺序模板（用户表格列序与默认不同时，配一次长期生效）──
+    // 保存在 localStorage；配置后粘贴任何顺序的文本都按模板解析。
+    const COL_ORDER_KEY = 'mf_batch_col_order';
+    function getColOrder() {
+        try { return localStorage.getItem(COL_ORDER_KEY) || ''; } catch (e) { return ''; }
+    }
+    function parseColOrder(tpl) {
+        return (tpl || '').split(/[,，]/).map(s => s.trim()).filter(Boolean).map(k => {
+            k = k.toLowerCase();
+            if (/^(seq|no|#|序号|编号)$/.test(k)) return 'seq';
+            if (/^(name|song|歌曲|歌名|歌)$/.test(k)) return 'name';
+            if (/^(performer|artist|singer|歌手|演唱者|演唱|原唱)$/.test(k)) return 'performer';
+            if (/^(lyricist|作词|词)$/.test(k)) return 'lyricist';
+            if (/^(composer|作曲|曲)$/.test(k)) return 'composer';
+            if (/^(词曲|词曲作者|words)$/.test(k)) return 'both';
+            return 'ignore';
+        });
+    }
+    function initColOrderUi() {
+        const inp = document.getElementById('colOrderInput');
+        const btn = document.getElementById('colOrderApply');
+        if (!inp || !btn) return;
+        inp.value = getColOrder();
+        const apply = () => {
+            localStorage.setItem(COL_ORDER_KEY, inp.value.trim());
+            updateCount();
+            btn.textContent = '✓ 已应用';
+            setTimeout(() => { btn.textContent = '应用'; }, 1200);
+        };
+        btn.addEventListener('click', apply);
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); });
+    }
+
     function parseSongs(text) {
         const lines = (text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
         // 分段：优先逗号/制表符/中文逗号/顿号；单段再试空白
@@ -91,12 +124,36 @@
             return parts;
         };
         const parsed = lines.map(splitLine).filter(p => p.length);
-        // ── v4.30.2：识别「Excel 粘贴的带序号行」────────────────────
-        // 形如「1\t小翅膀\t欧珈源\t100%\t欧珈源\t100%\t声音玩具」：
-        // 序号列 + 歌名 + 歌手 + 匹配度% + ……。不剥序号的话，序号"8"会被当成歌名、
-        // 真歌名"我有一个梦想"被当成歌手（线上实测 bug）。
-        // 判据（两遍扫描防误伤）：≥60% 的行首段是 1-4 位纯数字且段数≥3 → 全局按带序号解析。
-        // 单行孤立数字歌名（如「7 周杰伦」）不会触发全局模式，零误伤。
+
+        // ── 模式一：用户配置了列顺序模板 → 按模板精确映射（顺序完全由用户掌控）──
+        // 模板语法：逗号分隔列含义，支持：序号 / 歌名 / 演唱者(歌手) / 词 / 曲 / 词曲(同人同列) / 忽略
+        // 例：「序号,歌名,词曲,演唱者」= 第1列序号、第2列歌名、第3列词曲同人、第4列演唱者
+        // 保存在 localStorage，配置一次长期生效——用户表格列序与默认不同时的结构性解法。
+        const tpl = getColOrder().trim();
+        if (tpl) {
+            const keys = parseColOrder(tpl);
+            const songs = [];
+            for (const parts of parsed) {
+                if (!parts.length) continue;
+                const rec = { song_name: '', performer: '', lyricist: '', composer: '' };
+                parts.forEach((seg, i) => {
+                    const k = i < keys.length ? keys[i] : 'ignore';
+                    if (!k || k === 'seq' || k === 'ignore') return;
+                    if (k === 'name') { if (!rec.song_name) rec.song_name = seg; }
+                    else if (k === 'performer') { if (!rec.performer) rec.performer = seg; }
+                    else if (k === 'lyricist') { if (!rec.lyricist) rec.lyricist = seg; }
+                    else if (k === 'composer') { if (!rec.composer) rec.composer = seg; }
+                    else if (k === 'both') {
+                        if (!rec.lyricist) rec.lyricist = seg;
+                        if (!rec.composer) rec.composer = seg;
+                    }
+                });
+                if (rec.song_name) songs.push(rec);
+            }
+            return songs;
+        }
+
+        // ── 模式二：自动识别（无模板时的默认逻辑）──────────────
         const numbered = parsed.filter(p => /^\d{1,4}$/.test(p[0]) && p.length >= 3);
         const stripIndex = parsed.length >= 3 && numbered.length >= parsed.length * 0.6;
         const songs = [];
@@ -990,7 +1047,8 @@
         }
     });
 
-    // 初始化计数
+    // 初始化计数 + 列顺序模板 UI
+    initColOrderUi();
     updateCount();
 
     // 打开页面自动认出正在跑的批量任务（task26 等后台任务也能实时追踪）
