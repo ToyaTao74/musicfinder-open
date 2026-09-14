@@ -24,6 +24,9 @@
 .mf-ahome:hover{opacity:1;}
 .mf-ahome-name{opacity:1;color:#4f6ef7;border-bottom:1px dashed #b9c3f7;margin-left:0;}
 .mf-ahome-name:hover{border-bottom-style:solid;}
+.mf-ahome-btn{border:1px solid #cdd7f8;background:#f6f8ff;color:#4f6ef7;border-radius:8px;
+  padding:3px 10px;font-size:12px;margin-left:6px;display:inline-block;transition:all .15s;}
+.mf-ahome-btn:hover{background:#4f6ef7;color:#fff;border-color:#4f6ef7;}
 #mfAhomeMenu{position:fixed;z-index:99999;background:#fff;border-radius:12px;
   box-shadow:0 8px 30px rgba(30,40,80,.22);padding:10px 12px;font-size:13px;
   color:#1c2433;min-width:120px;font-family:-apple-system,"PingFang SC",sans-serif;}
@@ -92,23 +95,26 @@
 
     // 供其他脚本生成链接使用
     // v4.30.6：多歌手支持——「胜屿/王北车」按 / & 、等分隔拆分，每个歌手名各自可点开主页
-    window.mfArtistHomeHtml = function (name) {
+    window.mfArtistHomeHtml = function (name, opts) {
+        const o = opts || {};
         const esc = t => String(t == null ? '' : t)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const raw = String(name == null ? '' : name).trim();
         if (!raw) return '';
+        const mk = (n, txt) => o.text
+            ? '<button type="button" class="mf-ahome mf-ahome-btn" data-name="' + esc(n) + '">' + esc(txt || '打开艺人主页') + '</button>'
+            : '<span class="mf-ahome" data-name="' + esc(n) + '" title="打开歌手主页（五平台）">🔗</span>';
         const parts = raw.split(/\s*[/&,，、;；|]+\s*/).filter(Boolean);
         if (parts.length <= 1) {
-            return '<span class="mf-ahome" data-name="' + esc(raw) + '" title="打开歌手主页（五平台）">🔗</span>';
+            return mk(raw);
         }
         // 多歌手：每个名字各自可点（虚线下划线提示可点），分隔符保留原样展示
-        let out = '', rest = raw, sepRe = /\s*([/&,，、;；|]+)\s*/;
+        let out = '', rest = raw;
         for (let i = 0; i < parts.length; i++) {
             const p = parts[i];
             const idx = rest.indexOf(p);
             if (idx > 0) out += esc(rest.slice(0, idx));           // 分隔符原样
-            out += '<span class="mf-ahome mf-ahome-name" data-name="' + esc(p)
-                + '" title="打开「' + esc(p) + '」的歌手主页（五平台）">' + esc(p) + '</span>';
+            out += mk(p, (o.text ? p + ' ' : '') + '主页');
             rest = rest.slice(idx + p.length);
         }
         if (rest) out += esc(rest);
