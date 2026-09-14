@@ -84,23 +84,36 @@
     // ── 解析输入为歌单数组 ──
     function parseSongs(text) {
         const lines = (text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-        const songs = [];
-        for (const line of lines) {
-            // 优先按逗号/制表符/中文逗号/顿号分割
+        // 分段：优先逗号/制表符/中文逗号/顿号；单段再试空白
+        const splitLine = (line) => {
             let parts = line.split(/[,，\t、]/).map(s => s.trim()).filter(Boolean);
-            // 若只有一个片段，尝试按多个空白分割
-            if (parts.length <= 1) {
-                parts = line.split(/\s+/).map(s => s.trim()).filter(Boolean);
-            }
+            if (parts.length <= 1) parts = line.split(/\s+/).map(s => s.trim()).filter(Boolean);
+            return parts;
+        };
+        const parsed = lines.map(splitLine).filter(p => p.length);
+        // ── v4.30.2：识别「Excel 粘贴的带序号行」────────────────────
+        // 形如「1\t小翅膀\t欧珈源\t100%\t欧珈源\t100%\t声音玩具」：
+        // 序号列 + 歌名 + 歌手 + 匹配度% + ……。不剥序号的话，序号"8"会被当成歌名、
+        // 真歌名"我有一个梦想"被当成歌手（线上实测 bug）。
+        // 判据（两遍扫描防误伤）：≥60% 的行首段是 1-4 位纯数字且段数≥3 → 全局按带序号解析。
+        // 单行孤立数字歌名（如「7 周杰伦」）不会触发全局模式，零误伤。
+        const numbered = parsed.filter(p => /^\d{1,4}$/.test(p[0]) && p.length >= 3);
+        const stripIndex = parsed.length >= 3 && numbered.length >= parsed.length * 0.6;
+        const songs = [];
+        for (const parts of parsed) {
             if (!parts.length) continue;
-            const song_name = parts[0];
+            let segs = parts.slice();
+            if (stripIndex && /^\d{1,4}$/.test(segs[0])) segs.shift();
+            if (stripIndex) segs = segs.filter(s => !/^\d{1,3}(\.\d+)?%$/.test(s)); // 剔除匹配度%列
+            const song_name = segs[0];
             if (!song_name) continue;
-            songs.push({
-                song_name: song_name,
-                performer: parts[1] || '',
-                lyricist: parts[2] || '',
-                composer: parts[3] || '',
-            });
+            if (stripIndex) {
+                // 带序号的表格第 3 段之后语义不可靠（可能是匹配度/专辑/厂牌），
+                // 词曲宁空勿错——错误词曲会参与匹配过滤误伤正确结果
+                songs.push({ song_name, performer: segs[1] || '', lyricist: '', composer: '' });
+            } else {
+                songs.push({ song_name, performer: segs[1] || '', lyricist: segs[2] || '', composer: segs[3] || '' });
+            }
         }
         return songs;
     }
