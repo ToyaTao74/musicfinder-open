@@ -37,6 +37,18 @@
         return r.json();
     }
 
+    async function openArtistHome(name) {
+        try {
+            const r = await fetch('/api/artist_home?platform=netease&name=' + encodeURIComponent(name));
+            const d = await r.json();
+            if (d.ok && d.url) {
+                window.open(d.url, '_blank');
+            } else {
+                alert(d.error || '未找到该歌手的主页');
+            }
+        } catch (e) { alert('查询失败：' + e.message); }
+    }
+
     async function apiDismiss(body) {
         const r = await fetch(DISMISS, {
             method: 'POST',
@@ -69,10 +81,11 @@
                             '<button class="alias-op del" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(a) + '" title="删除该变体">✕</button></span>'
                           ).join('')
                         : '<span class="alias-empty">（无）</span>') +
-                    '</td><td></td></tr>';
+                    '</td><td><button class="alias-op" data-act="home" data-name="' + escapeHtml(base) + '">🔗 主页</button></td></tr>';
             }).join('');
         tb.querySelectorAll('.alias-op.del').forEach(btn => {
             btn.addEventListener('click', async () => {
+                if (btn.dataset.act === 'home') { openArtistHome(btn.dataset.name); return; }
                 if (!confirm('删除别名：' + btn.dataset.base + ' ↔ ' + btn.dataset.alias + ' ？')) return;
                 try {
                     const d = await apiSend('DELETE', { base: btn.dataset.base, alias: btn.dataset.alias });
@@ -97,7 +110,8 @@
                     '<td class="alias-evid">' + escapeHtml(s.song_name || '') + (s.ns ? '（匹配度 ' + s.ns + '%）' : '') + '</td>' +
                     '<td>' +
                     '<button class="alias-op" data-act="approve" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✓ 加入白名单</button> ' +
-                    '<button class="alias-op del" data-act="dismiss" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✕ 忽略</button>' +
+                    '<button class="alias-op del" data-act="dismiss" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✕ 忽略</button> ' +
+                    '<button class="alias-op" data-act="home" data-name="' + escapeHtml(alias) + '">🔗 主页</button>' +
                     '</td></tr>';
             }).join('');
         tb.querySelectorAll('.alias-op').forEach(btn => {
@@ -107,8 +121,11 @@
                     let d;
                     if (btn.dataset.act === 'approve') {
                         d = await apiSend('POST', body);
-                    } else {
+                    } else if (btn.dataset.act === 'dismiss') {
                         d = await apiDismiss(body);
+                    } else if (btn.dataset.act === 'home') {
+                        openArtistHome(btn.dataset.name);
+                        return;
                     }
                     renderAll(d);
                 } catch (e) { alert(e.message); }

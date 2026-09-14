@@ -1151,9 +1151,8 @@ def api_admin_invites():
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/admin/performer_aliases', methods=['GET'])
 def api_admin_performer_aliases_get():
-    err = _require_admin()
-    if err:
-        return err
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
     _load_performer_aliases()
     _load_alias_suggestions()
     return jsonify({'aliases': _all_performer_aliases(),
@@ -1162,9 +1161,8 @@ def api_admin_performer_aliases_get():
 
 @app.route('/api/admin/performer_aliases', methods=['POST'])
 def api_admin_performer_aliases_add():
-    err = _require_admin()
-    if err:
-        return err
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
     _load_performer_aliases()
     data = request.get_json(silent=True) or {}
     base = (data.get('base') or '').strip()
@@ -1186,9 +1184,8 @@ def api_admin_performer_aliases_add():
 
 @app.route('/api/admin/performer_aliases', methods=['DELETE'])
 def api_admin_performer_aliases_del():
-    err = _require_admin()
-    if err:
-        return err
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
     _load_performer_aliases()
     data = request.get_json(silent=True) or {}
     base = (data.get('base') or '').strip()
@@ -1208,9 +1205,8 @@ def api_admin_performer_aliases_del():
 @app.route('/api/admin/performer_alias_suggestions/dismiss', methods=['POST'])
 def api_admin_performer_alias_suggestions_dismiss():
     """忽略一条待确认建议（不并入白名单，仅从队列移除）。"""
-    err = _require_admin()
-    if err:
-        return err
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
     _load_alias_suggestions()
     data = request.get_json(silent=True) or {}
     base = (data.get('base') or '').strip()
@@ -7787,6 +7783,40 @@ def api_patch_mark():
         _apply_shared_mark_write('set', owner, key, new_mark)
     return jsonify({'ok': True, 'mark': new_mark, 'key': key, 'owner': owner})
 
+
+@app.route('/api/artist_home', methods=['GET'])
+def api_artist_home():
+    """查歌手主页链接（登录即可）。platform=netease（网易云歌手搜索 type=100）。"""
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
+    name = (request.args.get('name') or '').strip()
+    platform = (request.args.get('platform') or 'netease').strip()
+    if not name:
+        return jsonify({'error': '缺少歌手名'}), 400
+    if platform != 'netease':
+        return jsonify({'error': '该平台暂未支持，敬请期待'}), 400
+    try:
+        import requests as _rq
+        r = _rq.post('https://music.163.com/api/search/get',
+                     data={'s': name, 'type': 100, 'limit': 5, 'offset': 0},
+                     timeout=12,
+                     headers={'User-Agent': COMMON_UA, 'Referer': 'https://music.163.com/'})
+        j = r.json() or {}
+        arts = (j.get('result') or {}).get('artists') or []
+        if not arts:
+            return jsonify({'ok': False, 'error': '未找到该歌手的主页'})
+        hit = None
+        for a in arts:
+            if (a.get('name') or '').strip() == name:
+                hit = a
+                break
+        if not hit:
+            hit = arts[0]
+        return jsonify({'ok': True,
+                        'url': f"https://music.163.com/#/artist?id={hit['id']}",
+                        'name': hit.get('name')})
+    except Exception as e:
+        return jsonify({'error': str(e)[:200]}), 500
 
 @app.route('/api/marks/reassign_owner', methods=['POST'])
 def api_marks_reassign_owner():
