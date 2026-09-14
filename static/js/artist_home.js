@@ -22,6 +22,8 @@
         st.textContent = `
 .mf-ahome{cursor:pointer;opacity:.55;font-size:12px;margin-left:4px;text-decoration:none;transition:opacity .2s;}
 .mf-ahome:hover{opacity:1;}
+.mf-ahome-name{opacity:1;color:#4f6ef7;border-bottom:1px dashed #b9c3f7;margin-left:0;}
+.mf-ahome-name:hover{border-bottom-style:solid;}
 #mfAhomeMenu{position:fixed;z-index:99999;background:#fff;border-radius:12px;
   box-shadow:0 8px 30px rgba(30,40,80,.22);padding:10px 12px;font-size:13px;
   color:#1c2433;min-width:120px;font-family:-apple-system,"PingFang SC",sans-serif;}
@@ -89,9 +91,27 @@
     }, false);
 
     // 供其他脚本生成链接使用
+    // v4.30.6：多歌手支持——「胜屿/王北车」按 / & 、等分隔拆分，每个歌手名各自可点开主页
     window.mfArtistHomeHtml = function (name) {
-        return '<span class="mf-ahome" data-name="' + String(name == null ? '' : name)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-            + '" title="打开歌手主页（五平台）">🔗</span>';
+        const esc = t => String(t == null ? '' : t)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const raw = String(name == null ? '' : name).trim();
+        if (!raw) return '';
+        const parts = raw.split(/\s*[/&,，、;；|]+\s*/).filter(Boolean);
+        if (parts.length <= 1) {
+            return '<span class="mf-ahome" data-name="' + esc(raw) + '" title="打开歌手主页（五平台）">🔗</span>';
+        }
+        // 多歌手：每个名字各自可点（虚线下划线提示可点），分隔符保留原样展示
+        let out = '', rest = raw, sepRe = /\s*([/&,，、;；|]+)\s*/;
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i];
+            const idx = rest.indexOf(p);
+            if (idx > 0) out += esc(rest.slice(0, idx));           // 分隔符原样
+            out += '<span class="mf-ahome mf-ahome-name" data-name="' + esc(p)
+                + '" title="打开「' + esc(p) + '」的歌手主页（五平台）">' + esc(p) + '</span>';
+            rest = rest.slice(idx + p.length);
+        }
+        if (rest) out += esc(rest);
+        return out;
     };
 })();
