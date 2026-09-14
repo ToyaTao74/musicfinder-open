@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.5'
+APP_VERSION        = '4.30.6'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.5 修复 Windows 浏览器登录：系统 Edge 最优先（不再下载任何浏览器）/修复合体元组崩溃/失败详情自动上云'
+APP_VERSION_NAME   = 'v4.30.6 艺名管理全员可用 + 歌手主页净化搜索与相关性校验（不再弹无关艺人）+ 五平台主页链接'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -7784,6 +7784,15 @@ def api_patch_mark():
     return jsonify({'ok': True, 'mark': new_mark, 'key': key, 'owner': owner})
 
 
+def _clean_artist_name(name):
+    """净化歌手名（v4.30.6）：剥脏尾巴（反斜杠/斜杠后的杂讯、"乐队/组合/乐团"等后缀）。"""
+    import re as _re
+    n = (name or '').strip()
+    n = _re.sub(r'[\\/]+.*$', '', n).strip()          # "声音玩具\" / "xx/yy" → 剥尾
+    n = _re.sub(r'(乐队|乐团|组合|合唱团|及其乐队)$', '', n).strip()
+    return n or (name or '').strip()
+
+
 @app.route('/api/artist_home', methods=['GET'])
 def api_artist_home():
     """查歌手主页链接（登录即可）。支持 netease / qq / kugou / kuwo（qishui 暂无公开接口）。"""
@@ -7801,40 +7810,60 @@ def api_artist_home():
     try:
         if platform == 'netease':
             import requests as _rq
+            _q = _clean_artist_name(name)
             j = (_rq.post('https://music.163.com/api/search/get',
-                          data={'s': name, 'type': 100, 'limit': 5, 'offset': 0},
+                          data={'s': _q, 'type': 100, 'limit': 5, 'offset': 0},
                           timeout=12,
                           headers={'User-Agent': COMMON_UA, 'Referer': 'https://music.163.com/'}).json() or {})
             arts = (j.get('result') or {}).get('artists') or []
-            hit = next((a for a in arts if (a.get('name') or '').strip() == name), arts[0] if arts else None)
+            hit = next((a for a in arts if (a.get('name') or '').strip() == _q), None)
+            if not hit:
+                # 相关性校验：返回的艺人名与目标互相包含才认，绝不乱开无关主页
+                hit = next((a for a in arts
+                            if _q in (a.get('name') or '') or (a.get('name') or '') in _q), None)
+            if not hit:
+                return jsonify({'ok': False,
+                                'error': f'未找到与「{name}」对应的歌手主页（搜索到 {len(arts)} 个无关结果）'})
             if hit:
                 url = f"https://music.163.com/#/artist?id={hit['id']}"
                 hit_name = hit.get('name')
         elif platform == 'qq':
             import requests as _rq
+            _q = _clean_artist_name(name)
             j = (_rq.get('https://c.y.qq.com/soso/fcgi-bin/client_search_cp',
-                         params={'format': 'json', 'p': 1, 'n': 5, 'w': name},
+                         params={'format': 'json', 'p': 1, 'n': 5, 'w': _q},
                          timeout=12, headers={**_ua, 'Referer': 'https://y.qq.com/'}).json() or {})
             sl = (((j.get('data') or {}).get('song') or {}).get('list') or [])
             for sg in sl:
                 sings = sg.get('singer') or []
-                if sings and (sings[0].get('name') or '').strip() == name:
+                if sings and (sings[0].get('name') or '').strip() == _q:
                     url = f"https://y.qq.com/n/ryqq/singer/{sings[0].get('mid')}"
                     hit_name = sings[0].get('name')
                     break
             if not url and sl:
-                sings = sl[0].get('singer') or []
-                if sings:
-                    url = f"https://y.qq.com/n/ryqq/singer/{sings[0].get('mid')}"
-                    hit_name = sings[0].get('name')
+                for sg in sl:
+                    for sings in [sg.get('singer') or []]:
+                        for s0 in sings:
+                            _sn = (s0.get('name') or '').strip()
+                            if _q in _sn or _sn in _q:
+                                url = f"https://y.qq.com/n/ryqq/singer/{s0.get('mid')}"
+                                hit_name = _sn
+                                break
+                        if url:
+                            break
+                    if url:
+                        break
         elif platform == 'kugou':
             import requests as _rq
+            _q = _clean_artist_name(name)
             j = (_rq.get('https://mobiles.kugou.com/api/v3/search/singer',
-                         params={'keyword': name, 'pagesize': 5, 'page': 1},
+                         params={'keyword': _q, 'pagesize': 5, 'page': 1},
                          timeout=12, headers=_ua).json() or {})
             info = j.get('data') or []
-            hit = next((x for x in info if (x.get('singername') or '').strip() == name),
-                       info[0] if info else None)
+            hit = next((x for x in info if (x.get('singername') or '').strip() == _q), None)
+            if not hit:
+                hit = next((x for x in info
+                            if _q in (x.get('singername') or '') or (x.get('singername') or '') in _q), None)
             if hit and hit.get('singerid'):
                 import requests as _rq
                 rr = _rq.get(f'https://m3ws.kugou.com/singer/info/{hit["singerid"]}.html',
@@ -7845,16 +7874,17 @@ def api_artist_home():
         elif platform == 'kuwo':
             import requests as _rq
             import ast as _ast
+            _q = _clean_artist_name(name)
             r = _rq.get('https://search.kuwo.cn/r.s',
-                        params={'all': name, 'ft': 'artist', 'itemset': 'web',
+                        params={'all': _q, 'ft': 'artist', 'itemset': 'web',
                                 'client': 'kt', 'rformat': 'json', 'encoding': 'utf8'},
                         timeout=12, headers=_ua)
             j = _ast.literal_eval(r.text.strip())
             hit = next((a for a in (j.get('abslist') or [])
-                        if (a.get('ARTIST') or '').strip() == name),
-                       None)
-            if not hit and (j.get('abslist') or []):
-                hit = j['abslist'][0]
+                        if (a.get('ARTIST') or '').strip() == _q), None)
+            if not hit:
+                hit = next((a for a in (j.get('abslist') or [])
+                            if _q in (a.get('ARTIST') or '') or (a.get('ARTIST') or '') in _q), None)
             if hit and hit.get('ARTISTID'):
                 url = f"https://www.kuwo.cn/singer_detail/{hit['ARTISTID']}"
                 hit_name = hit.get('ARTIST')
