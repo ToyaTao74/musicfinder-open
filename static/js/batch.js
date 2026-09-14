@@ -309,7 +309,7 @@
         let rows = '';
         for (const r of results) {
             const plats = r.platforms || {};
-            const songCell = `<td class="col-song">${r.song_name}<br><span style="opacity:.55;font-size:11px">${r.performer || ''}</span></td>`;
+            const songCell = `<td class="col-song">${r.song_name}<br><span style="opacity:.55;font-size:11px">${r.performer || ''}</span>${window.mfArtistHomeHtml ? window.mfArtistHomeHtml(r.performer || '') : ''}</td>`;
             let cells = '';
             for (const p of PLATFORMS) {
                 const d = plats[p.code] || {};
@@ -668,7 +668,7 @@
             '<tr data-idx="' + r.idx + '">'
             + '<td class="idx">' + (r.idx + 1) + '</td>'
             + '<td>' + escapeHtml(r.song_name || '') + '</td>'
-            + '<td>' + escapeHtml(r.performer || '') + '</td>'
+            + '<td>' + escapeHtml(r.performer || '') + (window.mfArtistHomeHtml ? window.mfArtistHomeHtml(r.performer || '') : '') + '</td>'
             + '<td>' + f(r.qq_favorites) + '</td>'
             + '<td>' + f(r.kugou_favorites) + '</td>'
             + '<td>' + f(r.netease_favorites) + '</td>'

@@ -1369,7 +1369,7 @@ function renderSearchCard(g, i) {
                 heartBadges +
             '</div>' +
         '</td>' +
-        '<td class="td-artist">' + cellVal(g.performer) + '</td>' +
+        '<td class="td-artist">' + cellVal(g.performer) + (window.mfArtistHomeHtml ? window.mfArtistHomeHtml(g.performer) : '') + '</td>' +
         '<td class="td-album">' + cellVal(g.album) + '</td>' +
         '<td class="td-release">' + cellVal(g.release_date) + '</td>' +
         '<td class="td-lyricist">' + cellVal(g.lyricist) + '</td>' +
