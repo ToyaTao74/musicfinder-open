@@ -7726,6 +7726,61 @@ def api_patch_mark():
     return jsonify({'ok': True, 'mark': new_mark, 'key': key, 'owner': owner})
 
 
+@app.route('/api/marks/reassign_owner', methods=['POST'])
+def api_marks_reassign_owner():
+    """管理员：把某账号名下（含 legacy 无主）的标记整体转移给目标账号。
+    body: {from_owner: 'legacy'|账号名, to_owner: '账号名'}。云端改写归属 + 落目标账号本地。"""
+    me = _cur_user() or ''
+    ua = _load_users_auth()
+    if not me or not (ua.get(me) or {}).get('is_admin', False):
+        return jsonify({'error': '仅管理员可操作'}), 403
+    data = request.get_json(silent=True) or {}
+    from_owner = (data.get('from_owner') or 'legacy').strip()
+    to_owner = (data.get('to_owner') or '').strip()
+    if not to_owner or to_owner not in ua:
+        return jsonify({'error': '目标账号无效'}), 400
+    if from_owner == to_owner:
+        return jsonify({'error': '来源与目标相同'}), 400
+    cb = _cloudbase_cfg()
+    moved = 0
+    if cb:
+        try:
+            items = _cloudbase_call(cb, 'get_all') or []
+        except Exception:
+            logger.exception('迁移拉取云端失败')
+            return jsonify({'error': '云端拉取失败'}), 500
+        ups, dels = [], []
+        for it in items:
+            if it.get('datatype'):
+                continue
+            u = it.get('username') or 'legacy'
+            if u != from_owner:
+                continue
+            k = it.get('_id') or (it.get('data') or {}).get('mark_key')
+            d = (it.get('data') or {}).get('data')
+            if d is None:
+                d = it.get('data') or {}
+            if not k or not isinstance(d, dict) or not d.get('song_name'):
+                continue
+            ups.append({'mark_key': k, 'username': to_owner,
+                        'song_name': d.get('song_name', ''), 'performer': d.get('performer', ''),
+                        'album': d.get('album', ''), 'mark_type': d.get('mark_type', ''),
+                        'note': d.get('note', ''), 'data': d})
+            dels.append(k)
+            _write_owner_local_mark(to_owner, k, d)   # 同步落目标账号本地
+            moved += 1
+        for i in range(0, len(ups), 50):
+            try:
+                _cloudbase_call(cb, 'batch_upsert', payloads=ups[i:i + 50])
+            except Exception:
+                logger.exception('迁移批量写云端失败')
+        for dk in dels:
+            try:
+                _cloudbase_call(cb, 'delete', mark_key=dk)
+            except Exception:
+                logger.exception('迁移删旧归属记录失败 %s', dk)
+    return jsonify({'ok': True, 'moved': moved, 'from': from_owner, 'to': to_owner})
+
 @app.route('/api/marks/batch_update', methods=['POST'])
 def api_batch_update_marks():
     """批量改主标签/附加标签/备注。
