@@ -589,14 +589,13 @@
             v2StatusText.textContent = '✅ 已完成（未收录的歌留空 NULL，已 2 次确认，未填 0）';
         } else if (s.status === 'running' || s.status === 'pending') {
             // v4.30.11：动作与结果分开表述——『已查找』是动作进度，『有结果』是拿到数据的歌数
-            const hasRes = s.has_result || 0;
             if (done >= total && total > 0) {
                 const remain = ((cov.qq || {}).pending || 0) + ((cov.kugou || {}).pending || 0) + ((cov.netease || {}).pending || 0);
                 v2StatusText.textContent = remain > 0
-                    ? `✅ 已查找 ${total}/${total} 首（动作完成）· 有结果 ${hasRes}/${total} 首 —— 正在收尾：各平台补齐确认中（剩 ${remain} 项）`
-                    : `✅ 已查找 ${total}/${total} 首 · 有结果 ${hasRes}/${total} 首 —— 数据核对完毕`;
+                    ? `✅ 已查找 ${total}/${total} 首（动作完成）—— 正在收尾：各平台收藏量补齐确认中（剩 ${remain} 项）`
+                    : `✅ 已查找 ${total}/${total} 首 —— 数据核对完毕`;
             } else {
-                v2StatusText.textContent = `🔍 已查找 ${done}/${total} 首（${pct}%）· 有结果 ${hasRes} 首 · 预计剩余 ${formatEta(s.eta_sec)}`;
+                v2StatusText.textContent = `🔍 已查找 ${done}/${total} 首（${pct}%）· 预计剩余 ${formatEta(s.eta_sec)}`;
             }
         } else {
             v2StatusText.textContent = STATUS_TEXT[s.status] || s.status;
@@ -735,10 +734,11 @@
             const x = cov[p] || {};
             const fav = x.fav || 0, url = x.url || 0, pend = x.pending || 0;
             const fn = x.favnull || 0, cn = x.confirmed_null || 0, un = x.unknown_null || 0;
+            set('cov_' + p + '_found', tot);      // 已查找：每平台都对全部歌曲执行了搜索
             set('cov_' + p + '_fav', fav);
             set('cov_' + p + '_url', url);
             set('cov_' + p + '_pending', pend);
-            set('cov_' + p + '_favnull', fn);
+            set('cov_' + p + '_favnull', tot - fav);   // 平台未收录 = 总数 - 有结果
             const fnEl = document.getElementById('cov_' + p + '_favnull');
             if (fnEl) fnEl.title = `平台未收录 ${fn} 首：已2次确认 ${cn} / 待确认或可能限流 ${un}`;
             const bar = document.getElementById('cov_' + p + '_bar');
