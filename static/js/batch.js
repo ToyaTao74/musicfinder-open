@@ -588,14 +588,15 @@
             v2StatusDot.className = 'v2-status-dot completed';
             v2StatusText.textContent = '✅ 已完成（未收录的歌留空 NULL，已 2 次确认，未填 0）';
         } else if (s.status === 'running' || s.status === 'pending') {
+            // v4.30.11：动作与结果分开表述——『已查找』是动作进度，『有结果』是拿到数据的歌数
+            const hasRes = s.has_result || 0;
             if (done >= total && total > 0) {
-                // v4.30.11：补齐阶段——主流程已 100%，别再让人误以为"没查完"
                 const remain = ((cov.qq || {}).pending || 0) + ((cov.kugou || {}).pending || 0) + ((cov.netease || {}).pending || 0);
                 v2StatusText.textContent = remain > 0
-                    ? `✅ ${total} 首已全部搜索完成 —— 正在收尾：各平台收藏量补齐确认中（剩 ${remain} 项）`
-                    : `✅ ${total} 首已全部搜索完成 —— 正在收尾核对数据`;
+                    ? `✅ 已查找 ${total}/${total} 首（动作完成）· 有结果 ${hasRes}/${total} 首 —— 正在收尾：各平台补齐确认中（剩 ${remain} 项）`
+                    : `✅ 已查找 ${total}/${total} 首 · 有结果 ${hasRes}/${total} 首 —— 数据核对完毕`;
             } else {
-                v2StatusText.textContent = `🔍 搜索中 ${done}/${total}（${pct}%）· 速度 ${(s.speed_per_min||0).toFixed(1)} 首/分钟 · 预计剩余 ${formatEta(s.eta_sec)}`;
+                v2StatusText.textContent = `🔍 已查找 ${done}/${total} 首（${pct}%）· 有结果 ${hasRes} 首 · 预计剩余 ${formatEta(s.eta_sec)}`;
             }
         } else {
             v2StatusText.textContent = STATUS_TEXT[s.status] || s.status;
