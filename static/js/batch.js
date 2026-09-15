@@ -566,6 +566,7 @@
         // 「下一首」区域 —— 这是用户视角上 v2 dashboard 的灵魂
         renderNextSong(s);
         // 状态
+        const cov = s.coverage || {};
         v2StatusDot.className = 'v2-status-dot ' + (s.status || 'pending');
         const STATUS_TEXT = {
             pending:   '排队中…',
@@ -587,7 +588,15 @@
             v2StatusDot.className = 'v2-status-dot completed';
             v2StatusText.textContent = '✅ 已完成（未收录的歌留空 NULL，已 2 次确认，未填 0）';
         } else if (s.status === 'running' || s.status === 'pending') {
-            v2StatusText.textContent = `${STATUS_TEXT[s.status]} · 已识别 ${done}/${total}（${pct}%）`;
+            if (done >= total && total > 0) {
+                // v4.30.11：补齐阶段——主流程已 100%，别再让人误以为"没查完"
+                const remain = ((cov.qq || {}).pending || 0) + ((cov.kugou || {}).pending || 0) + ((cov.netease || {}).pending || 0);
+                v2StatusText.textContent = remain > 0
+                    ? `✅ ${total} 首已全部搜索完成 —— 正在收尾：各平台收藏量补齐确认中（剩 ${remain} 项）`
+                    : `✅ ${total} 首已全部搜索完成 —— 正在收尾核对数据`;
+            } else {
+                v2StatusText.textContent = `🔍 搜索中 ${done}/${total}（${pct}%）· 速度 ${(s.speed_per_min||0).toFixed(1)} 首/分钟 · 预计剩余 ${formatEta(s.eta_sec)}`;
+            }
         } else {
             v2StatusText.textContent = STATUS_TEXT[s.status] || s.status;
         }
@@ -605,8 +614,10 @@
             } else if (s.status === 'running' && totFn > 0) {
                 fnEl.hidden = false;
                 fnEl.className = 'v2-finalize-note running';
-                fnEl.textContent = `⏳ 还在补：还有 ${totFn} 首未收录待确认（已确认 ${totCn} / 待第 2 次确认或可能限流 ${totUn}），系统在平台恢复后会自动重试到干净。`;
-            } else {
+                fnEl.innerHTML = `📋 <b>当前进度说明：</b>全部 ${done} 首已完成跨平台搜索（主流程 100%）。现在做的是各平台收藏量的<b>补齐与二次确认</b>：<br>
+　· <b>${totCn} 处已 2 次确认平台无收录</b> —— 留空是正确结果，不是查询失败，导出表格不会有歧义<br>
+　· <b>${totUn} 处可能被限流 / 待二次确认</b> —— 系统会自动重试回填，无需人工操作<br>
+　完成时间取决于平台限流节奏，各平台卡片上有实时预估。`;
                 fnEl.hidden = true;
             }
         }
@@ -716,6 +727,9 @@
         const tot = cov.total || 0;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
         set('cov_qq_tot', tot); set('cov_kugou_tot', tot); set('cov_netease_tot', tot);
+        // v4.30.11：平台补齐速率估算（fav 增量/时间差 → ETA）
+        window._mfCovPrev = window._mfCovPrev || {};
+        const now = Date.now();
         for (const p of ['qq', 'kugou', 'netease']) {
             const x = cov[p] || {};
             const fav = x.fav || 0, url = x.url || 0, pend = x.pending || 0;
@@ -725,9 +739,39 @@
             set('cov_' + p + '_pending', pend);
             set('cov_' + p + '_favnull', fn);
             const fnEl = document.getElementById('cov_' + p + '_favnull');
-            if (fnEl) fnEl.title = `未收录(留空NULL) ${fn} 首：已2次确认 ${cn} / 可能限流未确认 ${un}`;
+            if (fnEl) fnEl.title = `平台未收录 ${fn} 首：已2次确认 ${cn} / 待确认或可能限流 ${un}`;
             const bar = document.getElementById('cov_' + p + '_bar');
             if (bar) bar.style.width = (tot ? Math.round(fav / tot * 100) : 0) + '%';
+            // 状态徽章：✅ 收录确认完成 / 🔄 补齐中
+            const badge = document.getElementById('cov_' + p + '_badge');
+            if (badge) {
+                if (pend > 0) {
+                    badge.textContent = '🔄 补齐中';
+                    badge.className = 'v2-cov-badge running';
+                } else {
+                    badge.textContent = '✅ 已完成';
+                    badge.className = 'v2-cov-badge done';
+                }
+            }
+            // ETA：按实时速率估算（两次轮询的 fav 增量），速率不足时显示限流节奏提示
+            const etaEl = document.getElementById('cov_' + p + '_eta');
+            if (etaEl) {
+                if (pend <= 0) {
+                    etaEl.textContent = '—';
+                } else {
+                    const pv = window._mfCovPrev[p];
+                    let etaTxt = '按平台限流节奏';
+                    if (pv && fav > pv.fav && now > pv.t) {
+                        const rate = (fav - pv.fav) / ((now - pv.t) / 60000);   // 首/分钟
+                        if (rate > 0.05) {
+                            const mins = Math.ceil(pend / rate);
+                            etaTxt = mins <= 60 ? `约 ${mins} 分钟` : `约 ${Math.ceil(mins / 60)} 小时`;
+                        }
+                    }
+                    etaEl.textContent = `剩 ${pend} 首 · ${etaTxt}`;
+                }
+            }
+            window._mfCovPrev[p] = { fav, t: now };
         }
     }
 

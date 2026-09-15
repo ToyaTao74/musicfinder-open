@@ -669,6 +669,10 @@
                 .download-btn{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
                 .download-btn:disabled{opacity:.5;cursor:not-allowed;}
                 @media (max-width:900px){.v2-stats{grid-template-columns:repeat(3,1fr);}.v2-coverage{grid-template-columns:1fr;}.v2-err-row{grid-template-columns:40px 1fr;}.v2-err-msg{display:none;}}
+            .v2-cov-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:2px;}
+            .v2-cov-badge.done{background:#e8f7ee;color:#16a34a;}
+            .v2-cov-badge.running{background:#fff4e0;color:#d97706;}
+            .v2-cov-row.eta span:last-child{color:#4f6ef7;font-weight:600;}
             </style>
             <div class="v2-head">
                 <div class="v2-title">
@@ -713,19 +717,22 @@
                     <div class="v2-cov-row"><span>收藏量</span><b><span id="cov_qq_fav">0</span>/<span id="cov_qq_tot">0</span></b></div>
                     <div class="v2-cov-row"><span>链接</span><span id="cov_qq_url">0</span></div>
                     <div class="v2-cov-row"><span>待确认</span><span id="cov_qq_pending">0</span></div>
-                    <div class="v2-cov-row warn"><span>未收录(留空)</span><span id="cov_qq_favnull">0</span></div>
+                    <div class="v2-cov-row eta"><span>预计剩余</span><span id="cov_qq_eta">—</span></div>
+                    <div class="v2-cov-row warn"><span>平台未收录</span><span id="cov_qq_favnull">0</span></div>
                 </div>
                 <div class="v2-cov-card" data-p="kugou"><h4>🐶 酷狗</h4><div class="v2-cov-bar"><i id="cov_kugou_bar"></i></div>
                     <div class="v2-cov-row"><span>收藏量</span><b><span id="cov_kugou_fav">0</span>/<span id="cov_kugou_tot">0</span></b></div>
                     <div class="v2-cov-row"><span>链接</span><span id="cov_kugou_url">0</span></div>
                     <div class="v2-cov-row"><span>待确认</span><span id="cov_kugou_pending">0</span></div>
-                    <div class="v2-cov-row warn"><span>未收录(留空)</span><span id="cov_kugou_favnull">0</span></div>
+                    <div class="v2-cov-row eta"><span>预计剩余</span><span id="cov_kugou_eta">—</span></div>
+                    <div class="v2-cov-row warn"><span>平台未收录</span><span id="cov_kugou_favnull">0</span></div>
                 </div>
                 <div class="v2-cov-card" data-p="netease"><h4>☁️ 网易云</h4><div class="v2-cov-bar"><i id="cov_netease_bar"></i></div>
                     <div class="v2-cov-row"><span>收藏量</span><b><span id="cov_netease_fav">0</span>/<span id="cov_netease_tot">0</span></b></div>
                     <div class="v2-cov-row"><span>链接</span><span id="cov_netease_url">0</span></div>
                     <div class="v2-cov-row"><span>待确认</span><span id="cov_netease_pending">0</span></div>
-                    <div class="v2-cov-row warn"><span>未收录(留空)</span><span id="cov_netease_favnull">0</span></div>
+                    <div class="v2-cov-row eta"><span>预计剩余</span><span id="cov_netease_eta">—</span></div>
+                    <div class="v2-cov-row warn"><span>平台未收录</span><span id="cov_netease_favnull">0</span></div>
                 </div>
             </div>
             <div class="v2-throttle" id="v2Throttle">限速状态：正常</div>
@@ -1094,7 +1101,7 @@
 <script src="{{ url_for('static', filename='js/global_help.js') }}?v=20260914a"></script>
 <script src="{{ url_for('static', filename='js/app.js', v='20260914g') }}"></script>
 <script src="{{ url_for('static', filename='js/alias.js') }}?v=20260914c"></script>
-<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260914f"></script>
+<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260915a"></script>
 <script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>
 <script src="{{ url_for('static', filename='js/playlist.js', v='20260826a') }}"></script>
 <script src="{{ url_for('static', filename='js/monitor.js', v='20260815d') }}"></script>
