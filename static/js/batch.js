@@ -735,6 +735,7 @@
             const fav = x.fav || 0, url = x.url || 0, pend = x.pending || 0;
             const fn = x.favnull || 0, cn = x.confirmed_null || 0, un = x.unknown_null || 0;
             set('cov_' + p + '_found', tot);      // 已查找：每平台都对全部歌曲执行了搜索
+            set('cov_' + p + '_tot_found', tot);
             set('cov_' + p + '_fav', fav);
             set('cov_' + p + '_url', url);
             set('cov_' + p + '_pending', pend);
