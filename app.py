@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.9'
+APP_VERSION        = '4.30.10'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.9 修复别名归一时序：含空格的别名（Double Face）在艺人拆分前整体替换——同名歌正确合并为一行'
+APP_VERSION_NAME   = 'v4.30.10 登录态持久化 30 天（修复隔天/关浏览器后被踢、写操作全部 401 的体验问题）'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -233,6 +233,11 @@ try:
             _sf.write(secrets.token_hex(32))
     with open(_SECRET_FILE, 'r') as _sf:
         app.secret_key = (_sf.read().strip() or secrets.token_hex(32))
+    try:
+        from datetime import timedelta as _td
+        app.config['PERMANENT_SESSION_LIFETIME'] = _td(days=30)
+    except Exception:
+        pass
 except Exception:
     app.secret_key = secrets.token_hex(32)
 
@@ -847,6 +852,7 @@ def api_auth_register():
         except: pass
         return jsonify({'error': msg}), 400
     session['username'] = username
+    session.permanent = True   # v4.30.9：登录态持久化 30 天（默认关浏览器即失效，用户天天被踢）
     g.current_user = session['username']
     # v4.20 异步化：三个云同步函数每个 timeout=15s，串行执行最慢可拖到 45s。
     # 全部挪到后台线程，立刻返 200；后台异常 logger.exception 不影响登录。
@@ -869,6 +875,7 @@ def api_auth_login():
     if not ok:
         return jsonify({'error': msg}), 401
     session['username'] = data.get('username', '').strip()
+    session.permanent = True   # v4.30.9：登录态持久化 30 天
     g.current_user = session['username']  # 本次请求内立即生效
     # v4.20 异步化：legacy 迁移 + 标记云拉 + blob 云拉都丢后台，绝不阻塞登录响应
     try:
