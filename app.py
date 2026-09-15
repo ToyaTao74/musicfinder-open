@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.7'
+APP_VERSION        = '4.30.8'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.7 修复同名歌因艺人尾标点写法差异被拆成两行（归一前剥尾标点，Double Face. 与 双面2Face. 正确合并）'
+APP_VERSION_NAME   = 'v4.30.8 酷狗网页版歌手主页已下线（如实提示不再返回坏链接）；其余四平台主页正常'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -7859,23 +7859,11 @@ def api_artist_home():
                     if url:
                         break
         elif platform == 'kugou':
-            import requests as _rq
+            # v4.30.8：酷狗网页版歌手主页已下线（实测 singer/info 页只剩导航壳不渲染
+            # 歌手数据、移动版 302 到首页）——不再返回坏链接，如实提示用户
             _q = _clean_artist_name(name)
-            j = (_rq.get('https://mobiles.kugou.com/api/v3/search/singer',
-                         params={'keyword': _q, 'pagesize': 5, 'page': 1},
-                         timeout=12, headers=_ua).json() or {})
-            info = j.get('data') or []
-            hit = next((x for x in info if (x.get('singername') or '').strip() == _q), None)
-            if not hit:
-                hit = next((x for x in info
-                            if _q in (x.get('singername') or '') or (x.get('singername') or '') in _q), None)
-            if hit and hit.get('singerid'):
-                import requests as _rq
-                rr = _rq.get(f'https://m3ws.kugou.com/singer/info/{hit["singerid"]}.html',
-                             timeout=12, headers=_ua, allow_redirects=True)
-                if '/singer/info/' in rr.url:
-                    url = rr.url
-                    hit_name = hit.get('singername')
+            return jsonify({'ok': False,
+                            'error': f'酷狗网页版歌手主页已下线，请在酷狗 App 内搜索「{_q}」'}), 200
         elif platform == 'kuwo':
             import requests as _rq
             import ast as _ast
