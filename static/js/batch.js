@@ -668,12 +668,21 @@
         const f = (v) => v == null
             ? '<span class="rf none">—</span>'
             : (v > 0 ? '<span class="rf">' + v + '</span>' : '<span class="rf zero">0</span>');
+        // v4.30.11：匹配列显示有意义的短标签（悬停看完整说明），不再用无语义的 ✓/! 图标
         const m = (v) => {
-            const tag = String(v || '').toLowerCase();
-            if (!tag || tag === 'none') return '<span class="match none">—</span>';
-            if (tag === 'good' || tag === 'exact') return '<span class="match good">✓</span>';
-            if (tag === 'maybe' || tag === 'partial') return '<span class="match maybe">?</span>';
-            return '<span class="match bad">!</span>';
+            const tag = String(v || '').trim();
+            if (!tag) return '<span class="match none">—</span>';
+            if (tag.indexOf('精准匹配') === 0) {
+                const txt = tag.indexOf('[片段') >= 0 ? '精准(片段)' : '精准';
+                return '<span class="match good" title="' + escapeHtml(tag) + '">' + txt + '</span>';
+            }
+            if (tag.indexOf('艺人变体') >= 0 || tag.indexOf('多艺人/别名') >= 0) {
+                return '<span class="match alias" style="background:#eef2ff;color:#4f6ef7" title="' + escapeHtml(tag) + '">别名认回</span>';
+            }
+            if (tag.indexOf('未收录') === 0) {
+                return '<span class="match none" title="' + escapeHtml(tag) + '">未收录</span>';
+            }
+            return '<span class="match maybe" title="' + escapeHtml(tag) + '">' + escapeHtml(tag.slice(0, 12)) + '</span>';
         };
         const html = rows.map(r =>
             '<tr data-idx="' + r.idx + '">'
