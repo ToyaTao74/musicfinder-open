@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.8'
+APP_VERSION        = '4.30.9'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.8 酷狗网页版歌手主页已下线（如实提示不再返回坏链接）；其余四平台主页正常'
+APP_VERSION_NAME   = 'v4.30.9 修复别名归一时序：含空格的别名（Double Face）在艺人拆分前整体替换——同名歌正确合并为一行'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -5926,6 +5926,28 @@ def _repair_paren(name):
 _RE_PLAIN_PARENS = re.compile(r'[（(][^）)]*[）)]')
 
 
+def _replace_aliases_in_text(text):
+    """v4.30.7：把文本中出现的已知别名整体替换为其 base 名（长名优先，避免子串误替换）。
+
+    必须在 _split_artist_names 之前调用——含空格的别名（如 "Double Face"）一旦被
+    split 拆成单词，与 base 的分组 key 就永不相等（实测《恍然》Double Face vs
+    双面2Face 拆两行的根因）。
+    """
+    _load_performer_aliases()
+    if not text:
+        return text
+    pairs = []
+    for base, aliases in _PERFORMER_ALIASES.items():
+        for a in [base] + list(aliases or []):
+            if a and a != base:
+                pairs.append((a, base))
+    pairs.sort(key=lambda x: -len(x[0]))
+    for a, base in pairs:
+        if a in text:
+            text = text.replace(a, base)
+    return text
+
+
 def _canonical_performer(name):
     """返回 name 的规范艺人名：若 name 是某 base 的已知别名，返回其 base；否则原样返回。
 
@@ -5966,7 +5988,10 @@ def _artist_group_key(performer):
     raw = _RE_PLAIN_PARENS.sub('', performer).strip()
     if not raw:
         return ()
-    # 外面人名统一走别名规范，使同一艺人的不同写法归一到同一 key
+    # v4.30.7：别名整体替换必须在 split 之前——含空格的别名（如 "Double Face"）
+    # 一旦被 split 拆成单词，与 base 的分组 key 永不相等（实测拆两行 bug）。
+    # 替换后仍逐词走 _canonical_performer 兜底（处理词级别名）。
+    raw = _replace_aliases_in_text(raw)
     return tuple(sorted(_canonical_performer(n) for n in _split_artist_names(raw)))
 
 
