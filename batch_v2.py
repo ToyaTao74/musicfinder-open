@@ -1447,7 +1447,9 @@ class _BatchV2Engine:
                                     OR (COALESCE(qq_url,'')='' AND COALESCE(qq_confirms,0)<2)
                                     OR (COALESCE(kugou_url,'')='' AND COALESCE(kugou_confirms,0)<2)
                                     OR (COALESCE(netease_url,'')='' AND COALESCE(netease_confirms,0)<2)
-                                  THEN 1 ELSE 0 END) AS still_unresolved
+                                  THEN 1 ELSE 0 END) AS still_unresolved,
+                          SUM(CASE WHEN COALESCE(qq_favorites,0)<>0 OR COALESCE(kugou_favorites,0)<>0
+                              OR COALESCE(netease_favorites,0)<>0 THEN 1 ELSE 0 END) AS has_result
                    FROM task_items WHERE task_id=?""",
                 (task_id,),
             ).fetchone()
@@ -1489,6 +1491,7 @@ class _BatchV2Engine:
         # 「正在跑」：5 个被 worker 最近 touch 过、还在 pending 的歌。
         # 多 worker 并发时最真实的"此刻正忙"。
         st['ongoing'] = [dict(o) for o in ongoing]
+        st['has_result'] = int(cov['has_result'] or 0)
         st['recent_rows'] = [dict(r) for r in recent]
         st['finalized'] = bool(t['finalized'])
         # 「已完成」按「全平台都已 resolved」算（3 平台都拿到数据 OR 都 2 次确认留空）。
