@@ -1,7 +1,8 @@
-/* ═══ 艺人别名管理（v4.30.4）：首页独立标签页 ═══
- * 后端：/api/admin/performer_aliases（GET/POST/DELETE，管理员）
+/* ═══ 艺名管理（v4.30.19 重构）：
+ * - 事件委托统一分发（修复：白名单行「主页」按钮因选择器遗漏永不触发——点不动的根因）
+ * - 按钮全套 UI 设计（平台色点 / 绿色确认 / 灰描边忽略 / 红色删除）
+ * 后端：/api/admin/performer_aliases（GET/POST/DELETE）
  *       /api/admin/performer_alias_suggestions/dismiss（POST）
- * 候选来源：搜索/批量匹配时自动收集「歌名强匹配但艺人写法对不上」的对。
  */
 (function () {
     'use strict';
@@ -15,6 +16,32 @@
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    /* ── 样式（组件加载即注入，与页面状态无关）── */
+    function ensureStyle() {
+        if (document.getElementById('aliasBtnStyle')) return;
+        const st = document.createElement('style');
+        st.id = 'aliasBtnStyle';
+        st.textContent = `
+        .alias-btn{border:none;border-radius:8px;padding:4px 12px;font-size:12.5px;font-weight:500;
+          cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;
+          transition:all .15s;vertical-align:middle;}
+        .alias-btn:active{transform:scale(.96);}
+        .alias-btn-ok{background:#e8f7ee;color:#16a34a;}
+        .alias-btn-ok:hover{background:#16a34a;color:#fff;}
+        .alias-btn-skip{background:#f1f3f7;color:#6b7280;}
+        .alias-btn-skip:hover{background:#6b7280;color:#fff;}
+        .alias-btn-del{background:#fdecec;color:#ef4444;padding:4px 8px;}
+        .alias-btn-del:hover{background:#ef4444;color:#fff;}
+        .alias-btn-home{background:#eef1fe;color:#4f6ef7;}
+        .alias-btn-home:hover{background:#4f6ef7;color:#fff;}
+        .alias-btn-home .plat-dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.85;}
+        .alias-tag{display:inline-flex;align-items:center;gap:6px;background:#f4f6ff;border:1px solid #e4e9fb;
+          border-radius:999px;padding:3px 6px 3px 12px;margin:3px 4px 3px 0;font-size:12.5px;color:#3b4252;}
+        `;
+        document.head.appendChild(st);
+    }
+
+    /* ── API ── */
     async function apiGet() {
         const r = await fetch(API);
         if (!r.ok) {
@@ -23,11 +50,20 @@
         }
         return r.json();
     }
-
     async function apiSend(method, body) {
         const r = await fetch(API, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
+            method, headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d.error || ('请求失败 ' + r.status));
+        }
+        return r.json();
+    }
+    async function apiDismiss(body) {
+        const r = await fetch(DISMISS, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
         if (!r.ok) {
@@ -37,38 +73,28 @@
         return r.json();
     }
 
-    const HOME_PLATS = [['qq', 'Q音'], ['kugou', '酷狗'], ['kuwo', '酷我'], ['netease', '网易云'], ['qishui', '汽水']];
+    /* ── 歌手主页 ── */
+    const HOME_PLATS = [['qq', 'Q音', '#31c27c'], ['kugou', '酷狗', '#2ca6e0'],
+                        ['kuwo', '酷我', '#f5a623'], ['netease', '网易云', '#e85454'],
+                        ['qishui', '汽水', '#8b5cf6']];
     async function openArtistHome(name, platform) {
         if (platform === 'qishui') { alert('汽水音乐暂无公开的歌手主页接口，敬请期待'); return; }
         try {
             const r = await fetch('/api/artist_home?platform=' + platform + '&name=' + encodeURIComponent(name));
             const d = await r.json();
-            if (d.ok && d.url) {
-                window.open(d.url, '_blank');
-            } else {
-                alert(d.error || '未找到该歌手的主页');
-            }
+            if (d.ok && d.url) { window.open(d.url, '_blank'); }
+            else { alert(d.error || '未找到该歌手的主页'); }
         } catch (e) { alert('查询失败：' + e.message); }
     }
     function homeButtons(name) {
-        return HOME_PLATS.map(([pf, label]) =>
-            '<button class="alias-op" data-act="home" data-name="' + escapeHtml(name) + '" data-platform="' + pf + '" title="在' + label + '打开歌手主页">' + label + '</button>'
-        ).join(' ');
+        return '<span style="display:inline-flex;gap:4px;flex-wrap:wrap;">' +
+            HOME_PLATS.map(([pf, label, color]) =>
+                '<button type="button" class="alias-btn alias-btn-home" data-act="home" data-name="' + escapeHtml(name) + '" data-platform="' + pf + '" title="在' + label + '打开歌手主页">' +
+                '<span class="plat-dot" style="background:' + color + '"></span>' + label + '</button>'
+            ).join('') + '</span>';
     }
 
-    async function apiDismiss(body) {
-        const r = await fetch(DISMISS, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        if (!r.ok) {
-            const d = await r.json().catch(() => ({}));
-            throw new Error(d.error || ('请求失败 ' + r.status));
-        }
-        return r.json();
-    }
-
+    /* ── 渲染：已生效白名单 ── */
     function renderAliases(aliases) {
         const tb = document.getElementById('aliasListTable');
         if (!tb) return;
@@ -77,31 +103,21 @@
             tb.innerHTML = '<tr><td class="alias-empty">暂无配置——系统遇到候选时会提示你确认</td></tr>';
             return;
         }
-        tb.innerHTML = '<tr><th>基名（曲库/常用名）</th><th>变体（平台写法 / 改名后）</th><th>操作</th></tr>' +
+        tb.innerHTML = '<tr><th>基名（曲库/常用名）</th><th>变体（平台写法 / 改名后）</th><th>歌手主页</th></tr>' +
             bases.map(base => {
                 const list = aliases[base] || [];
                 return '<tr><td><b>' + escapeHtml(base) + '</b></td><td>' +
                     (list.length
                         ? list.map(a =>
-                            '<span style="display:inline-flex;align-items:center;gap:4px;background:#f4f6ff;border-radius:8px;padding:2px 8px;margin:2px;">'
-                            + escapeHtml(a) +
-                            '<button class="alias-op del" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(a) + '" title="删除该变体">✕</button></span>'
+                            '<span class="alias-tag">' + escapeHtml(a) +
+                            '<button type="button" class="alias-btn alias-btn-del" data-act="del" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(a) + '" title="删除该变体">✕</button></span>'
                           ).join('')
                         : '<span class="alias-empty">（无）</span>') +
-                    '</td><td><button class="alias-op" data-act="home" data-name="' + escapeHtml(base) + '">🔗 主页</button></td></tr>';
+                    '</td><td>' + homeButtons(base) + '</td></tr>';
             }).join('');
-        tb.querySelectorAll('.alias-op.del').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if (btn.dataset.act === 'home') { openArtistHome(btn.dataset.name, btn.dataset.platform); return; }
-                if (!confirm('删除别名：' + btn.dataset.base + ' ↔ ' + btn.dataset.alias + ' ？')) return;
-                try {
-                    const d = await apiSend('DELETE', { base: btn.dataset.base, alias: btn.dataset.alias });
-                    renderAll(d);
-                } catch (e) { alert(e.message); }
-            });
-        });
     }
 
+    /* ── 渲染：待确认候选 ── */
     function renderSuggestions(suggestions) {
         const tb = document.getElementById('aliasSugTable');
         if (!tb) return;
@@ -115,27 +131,41 @@
                 const base = s.base || '', alias = s.alias || '';
                 return '<tr><td><b>' + escapeHtml(base) + '</b></td><td>' + escapeHtml(alias) + '</td>' +
                     '<td class="alias-evid">' + escapeHtml(s.song_name || '') + (s.ns ? '（匹配度 ' + s.ns + '%）' : '') + '</td>' +
-                    '<td>' +
-                    '<button class="alias-op" data-act="approve" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✓ 加入白名单</button> ' +
-                    '<button class="alias-op del" data-act="dismiss" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✕ 忽略</button> ' +
+                    '<td><span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+                    '<button type="button" class="alias-btn alias-btn-ok" data-act="approve" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✓ 加入白名单</button>' +
+                    '<button type="button" class="alias-btn alias-btn-skip" data-act="dismiss" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✕ 忽略</button>' +
                     homeButtons(alias) +
-                    '</td></tr>';
+                    '</span></td></tr>';
             }).join('');
-        tb.querySelectorAll('.alias-op').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const body = { base: btn.dataset.base, alias: btn.dataset.alias };
+    }
+
+    /* ── 事件委托：一个监听管所有表格按钮（approve/dismiss/home/del）── */
+    function bindDelegation() {
+        ['aliasListTable', 'aliasSugTable'].forEach(tid => {
+            const tb = document.getElementById(tid);
+            if (!tb) return;
+            tb.addEventListener('click', async (ev) => {
+                const btn = ev.target.closest('button[data-act]');
+                if (!btn || !tb.contains(btn)) return;
+                const act = btn.dataset.act;
+                const base = btn.dataset.base || '', alias = btn.dataset.alias || '';
                 try {
-                    let d;
-                    if (btn.dataset.act === 'approve') {
-                        d = await apiSend('POST', body);
-                    } else if (btn.dataset.act === 'dismiss') {
-                        d = await apiDismiss(body);
-                    } else if (btn.dataset.act === 'home') {
+                    if (act === 'approve') {
+                        btn.disabled = true; btn.textContent = '提交中…';
+                        const d = await apiSend('POST', { base, alias });
+                        renderAll(d);
+                    } else if (act === 'dismiss') {
+                        if (!confirm('忽略该候选？（忽略后不再提示）')) return;
+                        const d = await apiDismiss({ base, alias });
+                        renderAll(d);
+                    } else if (act === 'del') {
+                        if (!confirm('删除别名：' + base + ' ↔ ' + alias + ' ？')) return;
+                        const d = await apiSend('DELETE', { base, alias });
+                        renderAll(d);
+                    } else if (act === 'home') {
                         openArtistHome(btn.dataset.name, btn.dataset.platform);
-                        return;
                     }
-                    renderAll(d);
-                } catch (e) { alert(e.message); }
+                } catch (e) { alert(e.message); btn.disabled = false; }
             });
         });
     }
@@ -177,8 +207,9 @@
 
     function init() {
         if (!document.getElementById('tab-alias')) return;
+        ensureStyle();
         initAdd();
-        // 切到该 tab 时才拉数据（避免首页加载多一次请求）
+        bindDelegation();
         const tabBtn = document.querySelector('.tab-btn[data-tab="alias"]');
         if (tabBtn) {
             tabBtn.addEventListener('click', () => { setTimeout(load, 50); });

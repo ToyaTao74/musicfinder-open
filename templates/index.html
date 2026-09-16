@@ -1056,7 +1056,10 @@
             #tab-alias td{padding:8px;border-bottom:1px solid #f4f5f8;color:#374151;}
             #tab-alias .alias-add{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
             #tab-alias .alias-add input{flex:1;min-width:140px;padding:7px 10px;border:1px solid #e2e6ef;border-radius:8px;font-size:13px;}
-            #tab-alias .alias-add button{padding:7px 16px;border:none;border-radius:8px;background:#4f6ef7;color:#fff;font-size:13px;cursor:pointer;}
+            #tab-alias .alias-add button{padding:7px 20px;border:none;border-radius:8px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;}
+            #tab-alias .alias-add button:hover{filter:brightness(1.08);}
+            #tab-alias .alias-add input{padding:7px 10px;border:1.5px solid #e2e6ef;border-radius:8px;font-size:13px;outline:none;transition:border .15s;}
+            #tab-alias .alias-add input:focus{border-color:#8b5cf6;box-shadow:0 0 0 3px rgba(139,92,246,.15);}
             #tab-alias .alias-op{border:none;background:none;color:#4f6ef7;cursor:pointer;font-size:12px;text-decoration:underline;padding:2px 6px;}
             #tab-alias .alias-op.del{color:#ef4444;}
             #tab-alias .alias-empty{color:#9aa3b2;padding:12px 8px;text-align:center;}
@@ -1142,7 +1145,7 @@
 <script src="{{ url_for('static', filename='js/artist_home.js') }}?v=20260914e"></script>
 <script src="{{ url_for('static', filename='js/global_help.js') }}?v=20260916a"></script>
 <script src="{{ url_for('static', filename='js/app.js', v='20260916a') }}"></script>
-<script src="{{ url_for('static', filename='js/alias.js') }}?v=20260914c"></script>
+<script src="{{ url_for('static', filename='js/alias.js') }}?v=20260916d"></script>
 <script src="{{ url_for('static', filename='js/batch.js') }}?v=20260915e"></script>
 <script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>
 <script src="{{ url_for('static', filename='js/playlist.js', v='20260826a') }}"></script>
@@ -1437,55 +1440,6 @@
     .catch(function () {
       clearTimeout(fallbackTimer);
       if (el) el.textContent = 'v?-? · 网络异常';
-    });
-})();
-</script>
-<!-- ═══ MusicFinder 账号登录模态框（v4.30.16：此前只有 API 无 UI）═══ -->
-<div id="mfLoginModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:100000;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
-    <div style="background:#fff;border-radius:18px;padding:32px 34px;width:340px;max-width:92%;box-shadow:0 20px 60px rgba(0,0,0,.25);">
-        <h2 style="margin:0 0 4px;font-size:20px;color:#1c2433;text-align:center;">MusicFinder</h2>
-        <div style="font-size:13px;color:#8a93a6;text-align:center;margin-bottom:20px;">请登录你的账号后使用</div>
-        <input type="text" id="mfLoginUser" placeholder="用户名" autocomplete="username"
-               style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e6ef;border-radius:10px;font-size:14px;margin-bottom:12px;outline:none;">
-        <input type="password" id="mfLoginPwd" placeholder="密码" autocomplete="current-password"
-               style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid #e2e6ef;border-radius:10px;font-size:14px;margin-bottom:14px;outline:none;">
-        <button type="button" id="mfLoginBtn" style="width:100%;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;font-size:15px;font-weight:600;cursor:pointer;">登 录</button>
-        <div id="mfLoginMsg" style="font-size:13px;margin-top:12px;text-align:center;color:#8a93a6;min-height:18px;"></div>
-    </div>
-</div>
-<script>
-(function () {
-    'use strict';
-    document.addEventListener('DOMContentLoaded', function () {
-        const modal = document.getElementById('mfLoginModal');
-        if (!modal) return;
-        fetch('/api/auth/me').then(r => r.json()).then(me => {
-            if (me && me.logged_in) return;               // 已登录，不弹
-            modal.style.display = 'flex';
-            setTimeout(() => { const u = document.getElementById('mfLoginUser'); if (u) u.focus(); }, 100);
-        }).catch(() => {});
-        function doLogin() {
-            const user = document.getElementById('mfLoginUser').value.trim();
-            const pwd = document.getElementById('mfLoginPwd').value;
-            const msg = document.getElementById('mfLoginMsg');
-            if (!user || !pwd) { msg.textContent = '请输入用户名和密码'; msg.style.color = '#ef4444'; return; }
-            msg.textContent = '登录中…'; msg.style.color = '#8a93a6';
-            fetch('/api/auth/login', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: user, password: pwd }),
-            }).then(r => r.json().then(d => ({ ok: r.ok, d }))).then(({ ok, d }) => {
-                if (ok && d.ok) {
-                    msg.textContent = '✅ 登录成功，正在进入…'; msg.style.color = '#16a34a';
-                    setTimeout(() => location.reload(), 600);
-                } else {
-                    msg.textContent = '❌ ' + (d.error || '登录失败'); msg.style.color = '#ef4444';
-                }
-            }).catch(e => { msg.textContent = '❌ 网络异常：' + e.message; msg.style.color = '#ef4444'; });
-        }
-        document.getElementById('mfLoginBtn').addEventListener('click', doLogin);
-        ['mfLoginUser', 'mfLoginPwd'].forEach(id => {
-            document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-        });
     });
 })();
 </script>
