@@ -501,6 +501,23 @@
         </div>
 
         <div class="login-methods-note glass" style="margin-top:16px;">
+            <span class="lm-tag">扫码登录</span> 手机上打开对应音乐 App 扫一扫，凭证自动写入本机<b>并同步云端</b>——无需电脑浏览器。
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">
+                <button id="qrNeteaseBtn" class="tab-btn" style="padding:6px 18px;background:linear-gradient(135deg,#e85454,#f0736a);color:#fff;border:none;">📱 网易云 · 扫码登录</button>
+                <span style="font-size:12px;color:#9aa3b2;">Q音/酷狗/酷我/汽水：暂不支持扫码，用本地版登录后「Cookie 云同步」上传即可</span>
+            </div>
+        </div>
+<!-- 扫码登录模态框 -->
+<div id="qrModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:340px;width:92%;text-align:center;position:relative;">
+        <button id="qrClose" style="position:absolute;top:10px;right:14px;border:none;background:none;font-size:20px;color:#9aa3b2;cursor:pointer;">✕</button>
+        <h3 style="margin:0 0 4px;font-size:16px;color:#1c2433;">网易云 · 扫码登录</h3>
+        <div style="font-size:12px;color:#8a93a6;margin-bottom:14px;">打开网易云音乐 App → 左上角扫一扫</div>
+        <div id="qrBox" style="display:flex;align-items:center;justify-content:center;min-height:210px;"></div>
+        <div id="qrStatus" style="font-size:14px;margin-top:12px;color:#6b7280;">正在生成二维码…</div>
+    </div>
+</div>
+        <div class="login-methods-note glass" style="margin-top:16px;">
             <span class="lm-tag">Cookie 云同步</span> 管理员专用：把<b>本机已登录</b>的音乐平台 Cookie 上传云端，
             云端网页版（无浏览器环境）将自动共用——<b>本地登录一次，网页处处可用</b>。
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">
@@ -1121,9 +1138,10 @@
         </div>
     </div>
 
+<script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/artist_home.js') }}?v=20260914e"></script>
 <script src="{{ url_for('static', filename='js/global_help.js') }}?v=20260914a"></script>
-<script src="{{ url_for('static', filename='js/app.js', v='20260915h') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js', v='20260916a') }}"></script>
 <script src="{{ url_for('static', filename='js/alias.js') }}?v=20260914c"></script>
 <script src="{{ url_for('static', filename='js/batch.js') }}?v=20260915e"></script>
 <script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>

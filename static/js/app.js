@@ -3027,3 +3027,77 @@ resultsBody.addEventListener('click', (e) => {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCkSync);
     else initCkSync();
 })();
+
+// ═══ 扫码登录（v4.30.13：网易云二维码 → 手机扫码 → cookie 写入+云同步）═══
+(function () {
+    'use strict';
+    let qrTimer = null;
+    function stopPoll() { if (qrTimer) { clearInterval(qrTimer); qrTimer = null; } }
+    function drawQr(content) {
+        const box = document.getElementById('qrBox');
+        box.innerHTML = '';
+        try {
+            const qr = qrcode(0, 'M');
+            qr.addData(content);
+            qr.make();
+            box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 8 });
+        } catch (e) { box.innerHTML = '<div style="color:#ef4444;font-size:13px;">二维码渲染失败</div>'; }
+    }
+    async function startQr() {
+        const box = document.getElementById('qrBox');
+        const st = document.getElementById('qrStatus');
+        st.textContent = '正在生成二维码…'; st.style.color = '#6b7280';
+        stopPoll();
+        try {
+            const r = await fetch('/api/qrlogin/create', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: 'netease' }),
+            });
+            const d = await r.json();
+            if (!r.ok || !d.ok) { st.textContent = '❌ ' + (d.error || '创建失败'); st.style.color = '#ef4444'; return; }
+            drawQr(d.qr_content);
+            st.textContent = '请用网易云音乐 App 扫一扫'; st.style.color = '#6b7280';
+            qrTimer = setInterval(async () => {
+                try {
+                    const pr = await fetch('/api/qrlogin/poll?platform=netease');
+                    const pd = await pr.json();
+                    if (pd.status === 'scanned') {
+                        st.textContent = '✅ 已扫描——请在手机上确认登录'; st.style.color = '#d97706';
+                    } else if (pd.status === 'ok') {
+                        stopPoll();
+                        st.textContent = '🎉 登录成功！凭证已写入并同步云端'; st.style.color = '#16a34a';
+                        setTimeout(() => { closeQr(); }, 1600);
+                    } else if (pd.status === 'expired') {
+                        stopPoll();
+                        st.innerHTML = '二维码已过期　<button id="qrRefresh" style="border:none;background:#4f6ef7;color:#fff;border-radius:6px;padding:4px 14px;cursor:pointer;">刷新重试</button>';
+                        st.style.color = '#ef4444';
+                        const rb = document.getElementById('qrRefresh');
+                        if (rb) rb.addEventListener('click', startQr);
+                    } else if (pd.error) {
+                        stopPoll();
+                        st.textContent = '❌ ' + pd.error; st.style.color = '#ef4444';
+                    }
+                } catch (e) { /* 轮询瞬时失败忽略，下轮继续 */ }
+            }, 2500);
+        } catch (e) { st.textContent = '❌ 网络异常：' + e.message; st.style.color = '#ef4444'; }
+    }
+    function closeQr() {
+        stopPoll();
+        const m = document.getElementById('qrModal');
+        if (m) m.style.display = 'none';
+    }
+    function initQr() {
+        const btn = document.getElementById('qrNeteaseBtn');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            document.getElementById('qrModal').style.display = 'flex';
+            startQr();
+        });
+        document.getElementById('qrClose').addEventListener('click', closeQr);
+        document.getElementById('qrModal').addEventListener('click', (e) => {
+            if (e.target.id === 'qrModal') closeQr();
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initQr);
+    else initQr();
+})();

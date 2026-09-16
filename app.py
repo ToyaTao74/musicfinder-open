@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.12'
+APP_VERSION        = '4.30.13'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.12 Cookie 云同步：本地登录一次上传云端，云网页版自动拉取共用（无 GUI 环境的 Cookie 主通道）+ 自助改密'
+APP_VERSION_NAME   = 'v4.30.13 扫码登录：网页显示网易云二维码→手机App扫码→Cookie自动写入并同步云端（无需电脑浏览器）'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -7944,6 +7944,98 @@ def api_cookies_pull_cloud():
         return jsonify({'error': '云端没有共享 Cookie'}), 404
     save_cookies(ck)
     return jsonify({'ok': True, 'platforms': [k for k, v in ck.items() if v]})
+
+
+# ── 扫码登录（v4.30.13）：网页显示二维码 → 手机 App 扫码 → 云端自动换取 Cookie ──
+_qr_login_sessions = {}   # {platform: {'unikey': str, 'created_at': ts}}
+
+_QR_SUPPORTED = ('netease',)   # 本轮支持网易云（官方 QR 接口）；其余平台后续扩展
+
+def _qr_upstream_poll(platform, unikey):
+    """轮询上游二维码状态。返回 (code, resp) —— code: 801等待/802已扫/803成功/800过期。"""
+    import requests as _rq
+    r = _rq.post('https://music.163.com/api/login/qrcode/client/login',
+                 data={'key': unikey, 'type': 1}, timeout=10,
+                 headers={'User-Agent': COMMON_UA, 'Referer': 'https://music.163.com/'})
+    return (r.json().get('code') or 0), r
+
+def _cookies_from_response(resp):
+    """从成功响应提取 cookie 字符串（Set-Cookie 优先，缺失时用 resp.cookies 拼接）。"""
+    pairs = {}
+    raw = resp.headers.get('Set-Cookie', '')
+    if raw:
+        import re as _re
+        for m in _re.finditer(r'([^,;\s]+)=([^;]*)', raw):
+            k, v = m.group(1), m.group(2)
+            if k and v and k.lower() not in ('path', 'domain', 'expires', 'max-age', 'secure', 'httponly', 'samesite'):
+                pairs[k] = v
+    if not pairs:
+        for k, v in resp.cookies.items():
+            pairs[k] = v
+    if 'MUSIC_U' not in pairs:
+        for k, v in resp.cookies.items():
+            if k == 'MUSIC_U':
+                pairs['MUSIC_U'] = v
+    return '; '.join(f'{k}={v}' for k, v in pairs.items() if v)
+
+
+@app.route('/api/qrlogin/create', methods=['POST'])
+def api_qrlogin_create():
+    """创建扫码登录会话：返回二维码内容（前端渲染成二维码图片）。登录即可。"""
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
+    data = request.get_json(silent=True) or {}
+    platform = (data.get('platform') or '').strip()
+    if platform not in _QR_SUPPORTED:
+        return jsonify({'error': '该平台暂不支持扫码登录（请用本地版登录后云同步）'}), 400
+    import requests as _rq
+    try:
+        r = _rq.post('https://music.163.com/api/login/qrcode/unikey',
+                     data={'type': 1}, timeout=10,
+                     headers={'User-Agent': COMMON_UA, 'Referer': 'https://music.163.com/'})
+        unikey = r.json().get('unikey') or ''
+    except Exception as e:
+        return jsonify({'error': f'获取二维码失败: {str(e)[:120]}'}), 500
+    if not unikey:
+        return jsonify({'error': '获取二维码失败（平台未返回 key）'}), 500
+    _qr_login_sessions[platform] = {'unikey': unikey, 'created_at': time.time()}
+    return jsonify({'ok': True, 'platform': platform,
+                    'qr_content': f'https://music.163.com/login?codekey={unikey}'})
+
+
+@app.route('/api/qrlogin/poll', methods=['GET'])
+def api_qrlogin_poll():
+    """轮询扫码状态：waiting / scanned / ok(写cookie+云同步) / expired。"""
+    if not _cur_user():
+        return jsonify({'error': '请先登录'}), 401
+    platform = (request.args.get('platform') or '').strip()
+    sess = _qr_login_sessions.get(platform)
+    if not sess:
+        return jsonify({'error': '会话不存在，请重新生成二维码'}), 404
+    if time.time() - sess['created_at'] > 300:
+        _qr_login_sessions.pop(platform, None)
+        return jsonify({'status': 'expired'})
+    try:
+        code, resp = _qr_upstream_poll(platform, sess['unikey'])
+    except Exception as e:
+        return jsonify({'error': f'轮询失败: {str(e)[:120]}'}), 500
+    if code == 803:
+        ck_str = _cookies_from_response(resp)
+        if not ck_str or 'MUSIC_U' not in ck_str:
+            return jsonify({'status': 'expired', 'note': '登录成功但未取到凭证，请重试'})
+        # 写本机 + 推云端共享（一次扫码，处处可用）
+        ck = load_cookies()
+        ck[platform] = ck_str
+        save_cookies(ck)
+        _push_cookies_to_cloud(ck)
+        _qr_login_sessions.pop(platform, None)
+        return jsonify({'status': 'ok', 'platform': platform, 'pushed_cloud': True})
+    if code == 802:
+        return jsonify({'status': 'scanned'})
+    if code == 800:
+        _qr_login_sessions.pop(platform, None)
+        return jsonify({'status': 'expired'})
+    return jsonify({'status': 'waiting'})
 
 
 @app.route('/api/artist_home', methods=['GET'])
