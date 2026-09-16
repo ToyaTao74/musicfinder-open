@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.10'
+APP_VERSION        = '4.30.12'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.10 登录态持久化 30 天（修复隔天/关浏览器后被踢、写操作全部 401 的体验问题）'
+APP_VERSION_NAME   = 'v4.30.12 Cookie 云同步：本地登录一次上传云端，云网页版自动拉取共用（无 GUI 环境的 Cookie 主通道）+ 自助改密'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -148,6 +148,15 @@ def load_cookies():
                 return json.load(f)
         except:
             pass
+    # v4.30.12：本地没有 Cookie 时自动从云端拉取共享（云网页版无 GUI 的主通道），
+    # 拉到后落盘为本地缓存，后续读取零开销。
+    cloud_ck = _pull_cookies_from_cloud()
+    if cloud_ck:
+        try:
+            save_cookies(cloud_ck)
+        except Exception:
+            pass
+        return cloud_ck
     return {}
 
 
@@ -163,6 +172,55 @@ def save_cookies(cookies):
     except Exception as e:
         print(f"[Cookie] Save error: {e}")
         return False
+
+
+# ── Cookie 云同步（v4.30.12）：本地「浏览器登录」一次 → 云端网页版共用 ──
+_CK_SYNC_KEY = 'shared_platform_cookies'
+_ck_cloud_cache = {'data': None, 't': 0}
+
+def _push_cookies_to_cloud(cookies):
+    """把本机 Cookie 上传云端（datatype='cookie_sync'），云网页版自动拉取共用。管理员操作。"""
+    try:
+        cb = _cloudbase_cfg()
+        if not cb:
+            return False, '未配置云端通道'
+        payload = [{
+            'datatype': 'cookie_sync',
+            'mark_key': _CK_SYNC_KEY,
+            'username': _cur_user() or 'legacy',
+            'song_name': '[系统] 平台Cookie同步',
+            'note': '',
+            'data': {'cookies': cookies, 'updated_at': time.time()},
+        }]
+        _cloudbase_call(cb, 'batch_upsert', payloads=payload)
+        logger.info('[cookie] Cookie 已上传云端（云网页版将共用）')
+        return True, 'ok'
+    except Exception as e:
+        logger.warning('[cookie] Cookie 上云失败: %s', e)
+        return False, str(e)[:200]
+
+def _pull_cookies_from_cloud():
+    """从云端拉取共享 Cookie；10 分钟缓存避免高频请求。无则返回 None。"""
+    now = time.time()
+    if _ck_cloud_cache['data'] is not None and now - _ck_cloud_cache['t'] < 600:
+        return _ck_cloud_cache['data']
+    try:
+        cb = _cloudbase_cfg()
+        if not cb:
+            return None
+        items = _cloudbase_call(cb, 'get_all') or []
+        for it in items:
+            d1 = it.get('data') or {}
+            if d1.get('mark_key') != _CK_SYNC_KEY:
+                continue
+            d2 = d1.get('data') or {}
+            ck = d2.get('cookies')
+            if isinstance(ck, dict) and ck:
+                _ck_cloud_cache.update(data=ck, t=now)
+                return ck
+    except Exception as e:
+        logger.warning('[cookie] 云端 Cookie 拉取失败: %s', e)
+    return None
 
 
 def get_cookie_string(platform):
@@ -917,13 +975,6 @@ def api_auth_change_password():
     try: _audit_log(username, 'change_password', 'ok', request.remote_addr if request else '')
     except: pass
     return jsonify({'ok': True})
-
-
-@app.route('/api/auth/me', methods=['GET'])
-def api_auth_me():
-    """v4.30.11：当前登录用户（前端账号信息展示用）。"""
-    u = _cur_user()
-    return jsonify({'logged_in': bool(u), 'username': u})
 
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -7862,6 +7913,37 @@ def _clean_artist_name(name):
     n = _re.sub(r'[\\/]+.*$', '', n).strip()          # "声音玩具\" / "xx/yy" → 剥尾
     n = _re.sub(r'(乐队|乐团|组合|合唱团|及其乐队)$', '', n).strip()
     return n or (name or '').strip()
+
+
+@app.route('/api/cookies/push_cloud', methods=['POST'])
+def api_cookies_push_cloud():
+    """管理员：把本机 Cookie 上传云端，云网页版共用（一次登录处处可用）。"""
+    me = _cur_user() or ''
+    ua = _load_users_auth()
+    if not me or not (ua.get(me) or {}).get('is_admin', False):
+        return jsonify({'error': '仅管理员可操作'}), 403
+    ck = load_cookies()
+    have = [k for k, v in ck.items() if v]
+    if not have:
+        return jsonify({'error': '本机没有可上传的 Cookie（请先完成浏览器登录）'}), 400
+    ok, msg = _push_cookies_to_cloud(ck)
+    if ok:
+        return jsonify({'ok': True, 'platforms': have})
+    return jsonify({'error': msg}), 500
+
+
+@app.route('/api/cookies/pull_cloud', methods=['POST'])
+def api_cookies_pull_cloud():
+    """管理员：从云端拉取共享 Cookie 覆盖本机（云端登录过/另一台机器上传过时用）。"""
+    me = _cur_user() or ''
+    if not me:
+        return jsonify({'error': '请先登录'}), 401
+    _ck_cloud_cache.update(data=None, t=0)   # 绕过缓存强制拉取
+    ck = _pull_cookies_from_cloud()
+    if not ck:
+        return jsonify({'error': '云端没有共享 Cookie'}), 404
+    save_cookies(ck)
+    return jsonify({'ok': True, 'platforms': [k for k, v in ck.items() if v]})
 
 
 @app.route('/api/artist_home', methods=['GET'])

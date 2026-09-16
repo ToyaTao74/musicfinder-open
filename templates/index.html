@@ -501,6 +501,15 @@
         </div>
 
         <div class="login-methods-note glass" style="margin-top:16px;">
+            <span class="lm-tag">Cookie 云同步</span> 管理员专用：把<b>本机已登录</b>的音乐平台 Cookie 上传云端，
+            云端网页版（无浏览器环境）将自动共用——<b>本地登录一次，网页处处可用</b>。
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">
+                <button id="ckPushBtn" class="tab-btn" style="padding:6px 18px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;border:none;">⬆ 上传本机 Cookie 到云端</button>
+                <button id="ckPullBtn" class="tab-btn" style="padding:6px 18px;background:#f0f3ff;color:#4f6ef7;border:1px solid #cdd7f8;">⬇ 从云端拉取到本机</button>
+                <span id="ckSyncMsg" style="font-size:13px;color:#8a93a6;"></span>
+            </div>
+        </div>
+        <div class="login-methods-note glass" style="margin-top:16px;">
             <span class="lm-tag">账号</span> <b id="cpWho">—</b>，修改你的 MusicFinder 登录密码（改完自动同步云端，所有设备用新密码）。
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
                 <input type="password" id="cpOld" placeholder="当前密码" class="auth-input" autocomplete="current-password">

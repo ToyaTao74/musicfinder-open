@@ -2995,3 +2995,35 @@ resultsBody.addEventListener('click', (e) => {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initChangePw);
     else initChangePw();
 })();
+
+// ═══ Cookie 云同步（v4.30.12：管理员上传/下载共享 Cookie）═══
+(function () {
+    'use strict';
+    function initCkSync() {
+        const push = document.getElementById('ckPushBtn');
+        if (!push) return;
+        const pull = document.getElementById('ckPullBtn');
+        const msg = document.getElementById('ckSyncMsg');
+        const say = (t, ok) => { msg.textContent = t; msg.style.color = ok ? '#16a34a' : '#ef4444'; };
+        push.addEventListener('click', async () => {
+            say('上传中…', true);
+            try {
+                const r = await fetch('/api/cookies/push_cloud', { method: 'POST' });
+                const d = await r.json();
+                if (r.ok && d.ok) say('✅ 已上传：' + (d.platforms || []).join('、'), true);
+                else say('❌ ' + (d.error || '上传失败'), false);
+            } catch (e) { say('❌ 网络异常：' + e.message, false); }
+        });
+        pull.addEventListener('click', async () => {
+            say('拉取中…', true);
+            try {
+                const r = await fetch('/api/cookies/pull_cloud', { method: 'POST' });
+                const d = await r.json();
+                if (r.ok && d.ok) say('✅ 已拉取：' + (d.platforms || []).join('、'), true);
+                else say('❌ ' + (d.error || '云端没有共享 Cookie'), false);
+            } catch (e) { say('❌ 网络异常：' + e.message, false); }
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCkSync);
+    else initCkSync();
+})();
