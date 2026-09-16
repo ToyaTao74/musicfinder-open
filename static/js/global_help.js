@@ -50,7 +50,9 @@
         const st = document.createElement('style');
         st.id = 'mfHelpStyle';
         st.textContent = `
-#mfHelpFab{position:fixed;right:18px;bottom:18px;z-index:99990;width:44px;height:44px;border-radius:50%;
+@keyframes mfhelpPulse{0%,100%{transform:scale(1);box-shadow:0 4px 14px rgba(124,92,247,.35);}50%{transform:scale(1.12);box-shadow:0 6px 22px rgba(124,92,247,.6);}}
+            .mfhelp-pulse{animation:mfhelpPulse 1.6s ease-in-out infinite;}
+            #mfHelpFab{position:fixed;right:18px;bottom:18px;z-index:99990;width:44px;height:44px;border-radius:50%;
   border:none;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;font-size:20px;cursor:pointer;
   box-shadow:0 6px 20px rgba(79,110,247,.4);transition:transform .2s, box-shadow .2s;}
 #mfHelpFab:hover{transform:scale(1.1);box-shadow:0 8px 26px rgba(79,110,247,.55);}
@@ -101,8 +103,15 @@ button:disabled{cursor:not-allowed;opacity:.5;}
         fab.title = '功能使用指南（首次使用强烈建议看一遍）';
         fab.addEventListener('click', openHelp);
         document.body.appendChild(fab);
-        // 首次访问自动弹出
-        try { if (!localStorage.getItem(SEEN_KEY)) setTimeout(openHelp, 800); } catch (e) { /* 隐私模式忽略 */ }
+        // v4.30.14：首访不再自动弹出全屏遮罩（实测遮罩拦截了页面点击，
+        // 用户点按钮毫无反应且不知原因）——改为 ❓ 按钮跳动吸引注意，点击才弹
+        try {
+            if (!localStorage.getItem(SEEN_KEY)) {
+                fab.classList.add('mfhelp-pulse');
+                const markSeen = () => { try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {} };
+                fab.addEventListener('click', markSeen, { once: true });
+            }
+        } catch (e) { /* 隐私模式忽略 */ }
     }
 
     if (document.readyState === 'loading') {

@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.13'
+APP_VERSION        = '4.30.14'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.13 扫码登录：网页显示网易云二维码→手机App扫码→Cookie自动写入并同步云端（无需电脑浏览器）'
+APP_VERSION_NAME   = 'v4.30.14 修复云端登录回退失效（用户记录 datatype 被标记写入覆盖抹除 → get_all 过滤加固为 datatype/mark_key 前缀双条件）+ 帮助首访不再弹全屏遮罩（拦截页面点击的元凶）'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -665,9 +665,13 @@ def _cloud_auth_call(cb, action, **kwargs):
     data = res.get('data')
 
     if action == 'get_all' and biz and isinstance(data, list):
-        # song_marks 标准格式：datatype 在 data 嵌套层
+        # song_marks 标准格式：datatype 在 data 嵌套层。
+        # v4.30.14 加固：datatype 可能被其他通道的写入覆盖抹掉（实测事故：
+        # user 记录被标记 batch_upsert 覆盖后 datatype 丢失 → 全部用户读不到
+        # → 云端登录回退失效）。mark_key 前缀是更可靠的业务归属标识。
         return [it for it in data
-                if ((it.get('data') or {}).get('datatype') or '') == biz]
+                if ((it.get('data') or {}).get('datatype') or '') == biz
+                or str((it.get('data') or {}).get('mark_key') or '').startswith(biz + ':')]
 
     return data
 
