@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.16'
+APP_VERSION        = '4.30.17'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.16 补上账号登录界面——此前登录只有 API 无前端入口（用户在浏览器无处登录的最终答案）'
+APP_VERSION_NAME   = 'v4.30.17 艺名别名云同步：Mac 配置的别名白名单云端共用（云端新环境自动拉取）——修复云端搜索同名歌拆多行'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -5418,6 +5418,55 @@ def _alias_variants(s):
     return core or n
 
 
+_ALIAS_SYNC_KEY = 'shared_performer_aliases'
+_alias_cloud_cache = {'data': None, 't': 0}
+
+def _pull_aliases_from_cloud():
+    """从云端拉取共享别名白名单（10 分钟缓存）。无则返回 None。"""
+    now = time.time()
+    if _alias_cloud_cache['data'] is not None and now - _alias_cloud_cache['t'] < 600:
+        return _alias_cloud_cache['data']
+    try:
+        cb = _cloudbase_cfg()
+        if not cb:
+            return None
+        items = _cloudbase_call(cb, 'get_all') or []
+        for it in items:
+            d1 = it.get('data') or {}
+            if d1.get('mark_key') != _ALIAS_SYNC_KEY:
+                continue
+            d2 = d1.get('data') or {}
+            al = d2.get('aliases')
+            if isinstance(al, dict) and al:
+                _alias_cloud_cache.update(data=al, t=now)
+                return al
+    except Exception as e:
+        logger.warning('[alias] 云端别名拉取失败: %s', e)
+    return None
+
+def _push_aliases_to_cloud(aliases):
+    """把别名白名单上传云端共享（保存时自动触发）。"""
+    try:
+        cb = _cloudbase_cfg()
+        if not cb:
+            return False
+        payload = [{
+            'datatype': 'alias_sync',
+            'mark_key': _ALIAS_SYNC_KEY,
+            'username': _cur_user() or 'legacy',
+            'song_name': '[系统] 艺名别名同步',
+            'note': '',
+            'data': {'aliases': aliases, 'updated_at': time.time()},
+        }]
+        _cloudbase_call(cb, 'batch_upsert', payloads=payload)
+        _alias_cloud_cache.update(data=aliases, t=time.time())
+        logger.info('[alias] 别名白名单已同步云端（%d 组）', len(aliases))
+        return True
+    except Exception as e:
+        logger.warning('[alias] 别名上云失败: %s', e)
+        return False
+
+
 def _load_performer_aliases():
     """启动时加载「艺人变体白名单」，文件不存在则初始化默认（钦觉 变体表）。"""
     global _PERFORMER_ALIASES, _performer_aliases_loaded
@@ -5460,6 +5509,21 @@ def _load_performer_aliases():
                     loaded[k] = {x for x in v if isinstance(x, str) and x}
     except Exception:
         loaded = {}
+    # v4.30.17：本地无别名（云端容器新环境）→ 从云端拉取共享白名单并落盘缓存。
+    # Mac 上配的别名（歌手改名/多平台写法）云端立即生效，一处配置处处可用。
+    if not loaded:
+        cloud_al = _pull_aliases_from_cloud()
+        if cloud_al:
+            loaded = {k: {x for x in v if isinstance(x, str) and x}
+                      for k, v in cloud_al.items() if isinstance(k, str) and isinstance(v, (list, tuple))}
+            try:
+                with _performer_aliases_lock:
+                    tmp = _PERFORMER_ALIASES_FILE + '.tmp'
+                    with open(tmp, 'w', encoding='utf-8') as f:
+                        json.dump({k: sorted(v) for k, v in loaded.items()}, f, ensure_ascii=False, indent=2)
+                    os.replace(tmp, _PERFORMER_ALIASES_FILE)
+            except Exception:
+                pass
     # 合并默认值（已存在的条目以文件为主，仅补缺失的）
     for k, v in defaults.items():
         loaded.setdefault(k, set(v))
@@ -5476,6 +5540,8 @@ def _save_performer_aliases():
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
             os.replace(tmp, _PERFORMER_ALIASES_FILE)
+        # v4.30.17：同步云端共享（所有部署共用一份白名单）
+        _push_aliases_to_cloud(payload)
     except Exception as e:
         print(f'[performer_aliases] save error: {e}')
 
