@@ -84,10 +84,10 @@
                 '<th class="col-check"><input type="checkbox" id="marksHeadCheck" title="全选可见行"></th>' +
                 '<th>歌曲名</th><th>歌手</th><th>专辑</th>' +
                 '<th>标记类型</th><th>附加标签</th><th>备注</th><th>更新时间</th>' +
-                '<th>👤 操作人</th><th>操作</th>' +
+                '<th>操作人</th><th>操作</th>' +
                 '</tr>';
             if (marksSubtitle) {
-                marksSubtitle.textContent = '🌐 共享：所有账号的标记（默认全员可见；被授权「管理他人标记」的账号可改/删别人的标）';
+                marksSubtitle.textContent = '共享：所有账号的标记（默认全员可见；被授权「管理他人标记」的账号可改/删别人的标）';
             }
         } else {
             marksHead.innerHTML =

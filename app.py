@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.20'
+APP_VERSION        = '4.30.21'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.20 修复设置页四个功能按钮（扫码登录/Cookie上云/拉取/改密）误用 tab-btn class——点击触发全局 tab 切换把内容区清成空白'
+APP_VERSION_NAME   = 'v4.30.21 修复云端标记被同步逻辑误清（空本地 diff 删除加双护栏）+ 恢复全部标记数据 + 清理页面 emoji/水印'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -7228,12 +7228,24 @@ def _save_marks_cloudbase(marks):
         # 分批 50 条一次，避免云函数 body 过大或单次超限
         for i in range(0, len(payloads), 50):
             _cloudbase_call(cb, 'batch_upsert', payloads=payloads[i:i + 50])
-        # 3. 只删「当前用户」云端多出的（其他设备已取消的），绝不碰别人的行
-        for extra in (cloud_keys - local_keys):
-            try:
-                _cloudbase_call(cb, 'delete', mark_key=extra)
-            except Exception:
-                logger.exception('CloudBase 单点删除失败：%s' % extra)
+        # 3. 只删「当前用户」云端多出的（其他设备已取消的）。
+        #    v4.30.21 两道安全护栏（实测事故：云端容器本地标记为空 → cloud-local
+        #    = 全部标记被当"多出"删除，135 条标记被清空）：
+        #    a) 本地无任何标记时绝不执行 diff 删除（新设备/空环境保护）
+        #    b) 单次删除超过 20 条视为异常，拒绝并告警
+        if not local_keys:
+            logger.warning('[marks] 本地标记为空，跳过云端 diff 清理（防误删护栏 a）')
+        else:
+            extras = list(cloud_keys - local_keys)
+            if len(extras) > 20:
+                logger.error('[marks] 云端 diff 待删 %d 条超过护栏(20)，拒绝执行！'
+                             'local=%d cloud=%d', len(extras), len(local_keys), len(cloud_keys))
+            else:
+                for extra in extras:
+                    try:
+                        _cloudbase_call(cb, 'delete', mark_key=extra)
+                    except Exception:
+                        logger.exception('CloudBase 单点删除失败：%s' % extra)
     except Exception:
         logger.exception('写入 CloudBase 失败，回落本地保存')
         _save_marks_local(marks, merge_with_disk=False)
