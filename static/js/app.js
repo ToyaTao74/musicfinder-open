@@ -2952,3 +2952,46 @@ resultsBody.addEventListener('click', (e) => {
 
 
 // 全局批量任务进度条已移除（v4.25.20）：进度请到「批量歌单」页查看
+
+// ═══ 修改密码（v4.30.11：自助改密，写操作双写云端）═══
+(function () {
+    'use strict';
+    function initChangePw() {
+        const btn = document.getElementById('cpBtn');
+        if (!btn) return;
+        fetch('/api/auth/me').then(r => r.json()).then(me => {
+            const who = document.getElementById('cpWho');
+            if (who && me.username) who.textContent = '当前账号：' + me.username;
+        }).catch(() => {});
+        btn.addEventListener('click', async () => {
+            const msg = document.getElementById('cpMsg');
+            const old = document.getElementById('cpOld').value;
+            const n1 = document.getElementById('cpNew').value;
+            const n2 = document.getElementById('cpNew2').value;
+            if (!old || !n1) { msg.textContent = '⚠️ 当前密码和新密码都要填'; msg.style.color = '#ef4444'; return; }
+            if (n1.length < 4) { msg.textContent = '⚠️ 新密码至少 4 位'; msg.style.color = '#ef4444'; return; }
+            if (n1 !== n2) { msg.textContent = '⚠️ 两次输入的新密码不一致'; msg.style.color = '#ef4444'; return; }
+            msg.textContent = '提交中…'; msg.style.color = '#8a93a6';
+            try {
+                const r = await fetch('/api/auth/change_password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_password: old, new_password: n1 }),
+                });
+                const d = await r.json();
+                if (r.ok && d.ok) {
+                    msg.textContent = '✅ 密码已修改并同步云端，下次登录用新密码';
+                    msg.style.color = '#16a34a';
+                    document.getElementById('cpOld').value = '';
+                    document.getElementById('cpNew').value = '';
+                    document.getElementById('cpNew2').value = '';
+                } else {
+                    msg.textContent = '❌ ' + (d.error || '修改失败');
+                    msg.style.color = '#ef4444';
+                }
+            } catch (e) { msg.textContent = '❌ 网络异常：' + e.message; msg.style.color = '#ef4444'; }
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initChangePw);
+    else initChangePw();
+})();

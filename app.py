@@ -892,6 +892,40 @@ def api_auth_login():
     return jsonify({'ok': True, 'username': session['username']})
 
 
+@app.route('/api/auth/change_password', methods=['POST'])
+def api_auth_change_password():
+    """v4.30.11：用户自助修改自己的密码（原密码验证 + 双写云端）。"""
+    username = _cur_user()
+    if not username:
+        return jsonify({'error': '请先登录'}), 401
+    data = request.get_json(silent=True) or {}
+    old = data.get('old_password') or ''
+    new = data.get('new_password') or ''
+    if len(new) < 4:
+        return jsonify({'error': '新密码至少 4 位'}), 400
+    users = _load_users_auth()
+    if not _fetch_user_from_cloud_if_missing(users, username):
+        return jsonify({'error': '账号不存在'}), 404
+    u = users.get(username) or {}
+    if not _verify_password(old, u.get('pw', '')):
+        return jsonify({'error': '原密码错误'}), 400
+    if _verify_password(new, u.get('pw', '')):
+        return jsonify({'error': '新密码不能与当前密码相同'}), 400
+    u['pw'] = _hash_password(new)
+    u['updated_at'] = time.time()
+    _save_users_auth(users)   # 双写：本地落盘 + 推云端（所有设备生效）
+    try: _audit_log(username, 'change_password', 'ok', request.remote_addr if request else '')
+    except: pass
+    return jsonify({'ok': True})
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def api_auth_me():
+    """v4.30.11：当前登录用户（前端账号信息展示用）。"""
+    u = _cur_user()
+    return jsonify({'logged_in': bool(u), 'username': u})
+
+
 @app.route('/api/auth/logout', methods=['POST'])
 def api_auth_logout():
     session.pop('username', None)
@@ -13414,4 +13448,7 @@ if __name__ == '__main__':
     # reloader 默认开（开发期改代码自动重启）；常驻/launchd 托管时用环境变量
     # MF_RELOADER=0 关闭，避免 reloader 父子双进程与 launchd 的 KeepAlive 产生端口竞态
     _USE_RELOADER = (not FROZEN) and os.environ.get('MF_RELOADER', '1') != '0'
-    app.run(host='127.0.0.1', port=port, debug=False, use_reloader=_USE_RELOADER, threaded=True)
+    # v4.30.11：云托管（CloudRun）适配——MF_HOST/PORT 环境变量优先
+    _host = os.environ.get('MF_HOST', '127.0.0.1')
+    _port = int(os.environ.get('PORT', port))
+    app.run(host=_host, port=_port, debug=False, use_reloader=_USE_RELOADER, threaded=True)
