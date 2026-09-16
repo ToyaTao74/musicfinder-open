@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.18'
+APP_VERSION        = '4.30.19'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.18 部署数据快照：云端容器首启自动恢复本地的批量任务库/监测库/取证库（本地有的云端都有）'
+APP_VERSION_NAME   = 'v4.30.19 修复艺名添加/删除死锁（API 外层持锁调 save 再拿同把非重入锁 → 永久卡死）：锁换 RLock + 云端推送改异步'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -333,7 +333,7 @@ _users_lock = threading.Lock()
 #  持久化在 ~/.musicfinder/performer_aliases.json，可通过 admin 端点维护。
 # ═══════════════════════════════════════════════════════════════
 _PERFORMER_ALIASES_FILE = os.path.join(COOKIE_DIR, 'performer_aliases.json')
-_performer_aliases_lock = threading.Lock()
+_performer_aliases_lock = threading.RLock()   # RLock：API 外层持锁调 save（内部再拿锁），Lock 会死锁（实测云端添加卡死）
 _performer_aliases_loaded = False
 
 
@@ -5561,8 +5561,9 @@ def _save_performer_aliases():
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
             os.replace(tmp, _PERFORMER_ALIASES_FILE)
-        # v4.30.17：同步云端共享（所有部署共用一份白名单）
-        _push_aliases_to_cloud(payload)
+        # v4.30.19：云端共享改异步推送——同步推送会让 API 请求被网络 IO 拖慢
+        threading.Thread(target=_push_aliases_to_cloud, args=(dict(payload),),
+                         daemon=True, name='alias-cloud-push').start()
     except Exception as e:
         print(f'[performer_aliases] save error: {e}')
 
@@ -5595,7 +5596,7 @@ def _all_performer_aliases():
 # 记录一条建议（base=曲库名, alias=平台名），admin 后台一键批准即可并入白名单。
 # 这样「同一艺人改名/多账号」无需再逐首手工脚本，系统自动发现、人工一眼审。
 _PERFORMER_ALIAS_SUG_FILE = os.path.join(COOKIE_DIR, 'performer_alias_suggestions.json')
-_performer_alias_sug_lock = threading.Lock()
+_performer_alias_sug_lock = threading.RLock()  # 同上：API 外层持锁调 save 嵌套
 _performer_alias_sug_loaded = False
 _performer_alias_sugs = {}
 
