@@ -692,8 +692,11 @@ def _cloud_load_users():
             # 云端结构 { _id, data: { mark_key, datatype, data: { 业务字段 } } } ---- 业务字段在 .data.data
             wrapper = item.get('data') or {}
             inner = wrapper.get('data') or {}
-            # 防御：必须是用户业务（_cloud_auth_call 已按 datatype 过滤一遍，这里再核一次）
-            if (wrapper.get('datatype') or '') != 'user':
+            # 防御：必须是用户业务。v4.30.15：与 _cloud_auth_call 同步加固——
+            # 历史记录的 datatype 可能缺失（前端旧版/审计混合写入），mark_key
+            # 前缀 'user:' 是更可靠的归属标识（实测仅靠 datatype 会漏掉全部账号）。
+            _mk = str(wrapper.get('mark_key') or '')
+            if (wrapper.get('datatype') or '') != 'user' and not _mk.startswith('user:'):
                 continue
             # 用户名只信任 inner.username，不再用 _id / mark_key —— 防止「user:xxx」假账号
             uname = (inner.get('username') or '').strip()
