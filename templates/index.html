@@ -503,7 +503,7 @@
         <div class="login-methods-note glass" style="margin-top:16px;">
             <span class="lm-tag">扫码登录</span> 手机上打开对应音乐 App 扫一扫，凭证自动写入本机<b>并同步云端</b>——无需电脑浏览器。
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">
-                <button id="qrNeteaseBtn" class="tab-btn" style="padding:6px 18px;background:linear-gradient(135deg,#e85454,#f0736a);color:#fff;border:none;">📱 网易云 · 扫码登录</button>
+                <button id="qrNeteaseBtn" class="mf-func-btn" style="padding:6px 18px;background:linear-gradient(135deg,#e85454,#f0736a);color:#fff;border:none;">📱 网易云 · 扫码登录</button>
                 <span style="font-size:12px;color:#9aa3b2;">Q音/酷狗/酷我/汽水：暂不支持扫码，用本地版登录后「Cookie 云同步」上传即可</span>
             </div>
         </div>
@@ -521,8 +521,8 @@
             <span class="lm-tag">Cookie 云同步</span> 管理员专用：把<b>本机已登录</b>的音乐平台 Cookie 上传云端，
             云端网页版（无浏览器环境）将自动共用——<b>本地登录一次，网页处处可用</b>。
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">
-                <button id="ckPushBtn" class="tab-btn" style="padding:6px 18px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;border:none;">⬆ 上传本机 Cookie 到云端</button>
-                <button id="ckPullBtn" class="tab-btn" style="padding:6px 18px;background:#f0f3ff;color:#4f6ef7;border:1px solid #cdd7f8;">⬇ 从云端拉取到本机</button>
+                <button id="ckPushBtn" class="mf-func-btn" style="padding:6px 18px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;border:none;">⬆ 上传本机 Cookie 到云端</button>
+                <button id="ckPullBtn" class="mf-func-btn" style="padding:6px 18px;background:#f0f3ff;color:#4f6ef7;border:1px solid #cdd7f8;">⬇ 从云端拉取到本机</button>
                 <span id="ckSyncMsg" style="font-size:13px;color:#8a93a6;"></span>
             </div>
         </div>
@@ -532,7 +532,7 @@
                 <input type="password" id="cpOld" placeholder="当前密码" class="auth-input" autocomplete="current-password">
                 <input type="password" id="cpNew" placeholder="新密码（至少 4 位）" class="auth-input" autocomplete="new-password">
                 <input type="password" id="cpNew2" placeholder="再输一遍新密码" class="auth-input" autocomplete="new-password">
-                <button id="cpBtn" class="tab-btn" style="padding:6px 18px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;border:none;">确认修改</button>
+                <button id="cpBtn" class="mf-func-btn" style="padding:6px 18px;background:linear-gradient(135deg,#4f6ef7,#7c5cf7);color:#fff;border:none;">确认修改</button>
             </div>
             <div id="cpMsg" style="font-size:13px;margin-top:8px;color:#8a93a6;"></div>
         </div>
@@ -706,7 +706,10 @@
                 .v2-foot{margin-top:16px;display:flex;justify-content:flex-end;}
                 .download-btn{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
                 .download-btn:disabled{opacity:.5;cursor:not-allowed;}
-                @media (max-width:900px){.v2-stats{grid-template-columns:repeat(3,1fr);}.v2-coverage{grid-template-columns:1fr;}.v2-err-row{grid-template-columns:40px 1fr;}.v2-err-msg{display:none;}}
+                .mf-func-btn{cursor:pointer;font-family:inherit;transition:filter .15s,opacity .15s;}
+            .mf-func-btn:hover{filter:brightness(1.08);}
+            .mf-func-btn:disabled{opacity:.5;cursor:not-allowed;}
+            @media (max-width:900px){.v2-stats{grid-template-columns:repeat(3,1fr);}.v2-coverage{grid-template-columns:1fr;}.v2-err-row{grid-template-columns:40px 1fr;}.v2-err-msg{display:none;}}
             .v2-cov-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:2px;}
             .v2-cov-badge.done{background:#e8f7ee;color:#16a34a;}
             .v2-cov-badge.running{background:#fff4e0;color:#d97706;}
