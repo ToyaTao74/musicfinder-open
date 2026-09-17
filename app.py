@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.29'
+APP_VERSION        = '4.30.30'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.29 取证任务管理：任务列表新增「管理」弹窗，删除=前台软隐藏（后台数据保留）可恢复；含 v4.30.28 新任务跳转修复'
+APP_VERSION_NAME   = 'v4.30.30 部署数据安全：新增 db_export 导出接口 + 部署前刷新快照脚本（修复重发版本覆盖云端新建数据的事故）；含取证任务管理弹窗'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -1049,6 +1049,47 @@ def _user_stats(username):
     except Exception:
         pass
     return stats
+
+
+# ── v4.30.30 云端数据文件导出（部署前刷新快照，防止重发版本覆盖丢数据）──
+# 背景：CloudRun 每次发新版都是全新实例，_init_data_from_snapshot 会用镜像里的
+# 旧快照恢复 ~/.musicfinder/*.db —— 部署间隙新建的任务/证据会被冲掉（#17 事故）。
+# 部署流程改为：部署前先调本接口把线上最新数据拉回本地快照，再触发构建。
+_SNAPSHOT_EXPORT_FILES = (
+    'batch_v2.db', 'monitor.db', 'evidence.db',
+    'performer_alias_suggestions.json', 'merge_map.json', 'douyin_state.json',
+)
+
+
+def _snapshot_key_ok():
+    """部署密钥校验：与 mark-sync 云函数共用同一个 token。"""
+    key = (request.args.get('key') or request.headers.get('X-MF-Key') or '').strip()
+    expect = (os.environ.get('MUSICFINDER_CLOUDBASE_TOKEN') or '').strip() \
+        or (getattr(config, 'CLOUDBASE_TOKEN', '') or '').strip()
+    return bool(expect) and key == expect
+
+
+@app.route('/api/admin/db_export', methods=['GET'])
+def api_admin_db_export():
+    u = _cur_user()
+    if not ((u and _is_admin(u)) or _snapshot_key_ok()):
+        return jsonify({'error': '需要管理员权限'}), 403
+    name = os.path.basename(request.args.get('name') or '')
+    if name not in _SNAPSHOT_EXPORT_FILES:
+        return jsonify({'error': '不支持的文件名'}), 400
+    path = os.path.join(COOKIE_DIR, name)
+    if not os.path.exists(path):
+        return jsonify({'error': '文件不存在（线上尚未生成）'}), 404
+    if name.endswith('.db'):
+        try:  # WAL 收口，确保导出的是最新完整数据
+            import sqlite3 as _sq
+            conn = _sq.connect(path, timeout=10)
+            conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+            conn.close()
+        except Exception:
+            pass
+    from flask import send_file
+    return send_file(path, as_attachment=True, download_name=name)
 
 
 @app.route('/api/admin/users', methods=['GET'])
