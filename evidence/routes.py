@@ -342,7 +342,7 @@ def api_douyin_parse_link():
         return jsonify({'ok': False, 'error': '不是抖音链接（需含 douyin.com）'}), 400
     try:
         from .platforms.douyin import parse_video_url
-        info = parse_video_url(url, headless=True)
+        info = parse_video_url(url, headless=False)   # v4.30.26：headless 会触发抖音滑块，统一 headful（云端由 Xvfb 提供虚拟显示）
     except Exception as e:
         return jsonify({'ok': False, 'error': f'解析失败: {e}'}), 500
     if info.get('needs_login'):

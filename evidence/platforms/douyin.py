@@ -80,6 +80,15 @@ def _is_logged_in(page):
     return False
 
 
+def _launch_browser(p, headless=False):
+    """v4.30.26：统一浏览器启动——系统 Chrome 优先，失败自动降级 patchright
+    自带 Chromium（云端 Linux 容器无 Chrome 的场景）。两分支同为反爬补丁版。"""
+    try:
+        return p.chromium.launch(headless=headless, channel='chrome')
+    except Exception:
+        return p.chromium.launch(headless=headless)
+
+
 def login_flow(headless=False, timeout_sec=300):
     """交互式登录：打开抖音，等你扫码，自动检测登录成功后保存 storage_state。
 
@@ -91,7 +100,7 @@ def login_flow(headless=False, timeout_sec=300):
     except Exception:
         raise RuntimeError('未安装 patchright：pip install patchright 后再登录')
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless, channel='chrome')
+        browser = _launch_browser(p, headless=headless)
         ctx = browser.new_context()
         page = ctx.new_page()
         page.goto('https://www.douyin.com/', wait_until='domcontentloaded')
@@ -265,7 +274,7 @@ def search(song_name, artist='', version='', target_count=300,
             ctx = p.chromium.launch_persistent_context(
                 user_data_dir=DOUYIN_PROFILE,
                 headless=headless,
-                channel='chrome',
+                
                 user_agent=COMMON_UA,
                 viewport={'width': 1280, 'height': 900},
                 locale='zh-CN',
@@ -339,7 +348,7 @@ def parse_video_url(url, headless=True, timeout_ms=20000):
             'video_title': '', 'video_url': ''}
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=headless, channel='chrome')
+            browser = _launch_browser(p, headless=headless)
             ctx = browser.new_context(storage_state=STATE_PATH)
             page = ctx.new_page()
             page.goto(url, wait_until='domcontentloaded', timeout=timeout_ms)
