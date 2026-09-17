@@ -1137,6 +1137,9 @@ def ext_file(name):
 @app.route('/ext/setup.bat', methods=['GET'])
 def ext_setup_bat():
     base = request.url_root.rstrip('/')
+    # 云端在反代后面拿到的可能是 http；公网域名强制 https，保证 curl 下载可达
+    if base.startswith('http://'):
+        base = 'https://' + base[len('http://'):]
     lines = [
         '@echo off',
         'chcp 65001 >nul',
