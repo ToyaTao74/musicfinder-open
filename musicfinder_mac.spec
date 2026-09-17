@@ -51,6 +51,7 @@ a = Analysis(
         # Playwright 一键浏览器登录：显式声明以打进包（Chromium 浏览器运行时按需下载到用户级缓存，
         # 不打包进安装包，避免 macOS PyInstaller ad-hoc 重签失败 + 安装包体积膨胀）
         'playwright', 'playwright.sync_api', 'playwright.async_api', 'greenlet',
+        'patchright', 'patchright.sync_api', 'patchright.async_api',
     ],
     noarchive=False,
 )

@@ -55,6 +55,7 @@ a = Analysis(
         # Playwright 一键浏览器登录：Python 包显式声明以打进包；Windows 的 Chromium 浏览器
         # 二进制通过上方 datas 烤进安装包（零下载），macOS 则在运行时按需下载规避重签失败
         'playwright', 'playwright.sync_api', 'playwright.async_api', 'greenlet',
+        'patchright', 'patchright.sync_api', 'patchright.async_api',
     ],
     noarchive=False,
 )
