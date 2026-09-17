@@ -523,7 +523,10 @@
       // ② 后端 job 被占用（_start_job 返回 ok:false）时任务【已入库】且 HTTP 仍是 200，
       //    api() 不会抛错——必须照样跳到新任务，否则页面停留在旧任务上误导用户；
       // ③ ok:false 时明示「已加入队列」，文案不再假装"已开始抓取"。
-      const newIds = (r && r.data && r.data.task_ids) || [];
+      // v4.30.28 修复：后端 /task/start 把 task_ids 放在响应顶层（无 data 包裹），
+      // 旧代码读 r.data.task_ids 恒为空 → 提交新任务后页面停在旧任务并误报
+      // 「已自动跳转到新任务 #16」。兼容两种结构，取新任务号最大值。
+      const newIds = (r && (r.task_ids || (r.data && r.data.task_ids))) || [];
       if (newIds.length) state.taskId = Math.max(...newIds);
       await loadTasks();
       if (r && r.ok === false) {
