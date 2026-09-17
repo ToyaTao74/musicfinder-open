@@ -17,11 +17,13 @@ def run_task(task_id, song_name, artist='', version='', platforms=None, opts=Non
     db.update_task(task_id, status=db.TASK_RUNNING, message='开始监测')
     discovered = verified = qualified = 0
     need_login = False
+    plat_errors = []   # v4.30.32：收集平台级错误——之前被静默跳过，任务误报「未发现相关作品」
 
     for plat in platforms:
         try:
             cands = run_platform(plat, song_name, artist=artist, version=version, opts=opts)
         except Exception as e:
+            plat_errors.append(f'{D.PLATFORM_NAMES.get(plat, plat)} 异常: {e}')
             db.update_task(task_id, message=f'{D.PLATFORM_NAMES.get(plat, plat)} 异常: {e}')
             continue
 
@@ -31,6 +33,8 @@ def run_task(task_id, song_name, artist='', version='', platforms=None, opts=Non
 
         for c in cands:
             if not isinstance(c, dict) or 'error' in c:
+                if isinstance(c, dict) and c.get('error'):
+                    plat_errors.append(f'{D.PLATFORM_NAMES.get(plat, plat)}: {c["error"]}')
                 continue
             discovered += 1
             verified += 1
@@ -65,6 +69,9 @@ def run_task(task_id, song_name, artist='', version='', platforms=None, opts=Non
     db.update_task(task_id, discovered=discovered, verified=verified, qualified=qualified)
     if need_login and discovered == 0:
         db.finish_task(task_id, db.TASK_NEEDS_LOGIN, message='抖音需登录后才能抓取（CLI 登录一次即可）')
+    elif discovered == 0 and plat_errors:
+        # v4.30.32：有明确报错就如实标 failed 并展示首条错误，不再伪装「未发现」
+        db.finish_task(task_id, db.TASK_FAILED, message=plat_errors[0][:200])
     elif discovered == 0:
         # 动态按实际查询的平台数生成消息（之前写死"三个平台"，勾 1 个时误导）
         names = [D.PLATFORM_NAMES.get(p, p) for p in platforms]
@@ -77,7 +84,10 @@ def run_task(task_id, song_name, artist='', version='', platforms=None, opts=Non
             msg = f'{joined} 均未发现相关作品'
         db.finish_task(task_id, db.TASK_EMPTY, message=msg)
     elif qualified == 0:
-        db.finish_task(task_id, db.TASK_PARTIAL, message='已发现作品，但均未达证据阈值')
+        msg = '已发现作品，但均未达证据阈值'
+        if plat_errors:
+            msg += '；' + plat_errors[0][:120]
+        db.finish_task(task_id, db.TASK_PARTIAL, message=msg)
     else:
         db.finish_task(task_id, db.TASK_DONE,
                        message=f'完成：发现 {discovered} 条，合格 {qualified} 条')
