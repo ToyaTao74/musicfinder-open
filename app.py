@@ -7238,6 +7238,8 @@ def _save_marks_cloudbase(marks):
         #    b) 单次删除超过 20 条视为异常，拒绝并告警
         # 护栏 c（v4.30.24）：共享 blob（Cookie 同步/别名同步等）绝不参与 diff 清理
         cloud_keys = {k for k in cloud_keys if not str(k).startswith('shared_')}
+        # 护栏 c（v4.30.24）：共享 blob（Cookie 同步/别名同步等）绝不参与 diff 清理
+        cloud_keys = {k for k in cloud_keys if not str(k).startswith('shared_')}
         if not local_keys:
             logger.warning('[marks] 本地标记为空，跳过云端 diff 清理（防误删护栏 a）')
         else:
