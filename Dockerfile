@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# node：网易云 eapi 加密脚本运行时；xvfb：虚拟显示（抖音取证 headful 浏览器）
+# node：网易云 eapi 加密脚本运行时；xvfb+xauth：虚拟显示（抖音取证 headful 浏览器，xvfb-run 依赖 xauth）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates xvfb libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+    curl ca-certificates xvfb xauth libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
     libxrandr2 libgbm1 libasound2 fonts-liberation \
  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
