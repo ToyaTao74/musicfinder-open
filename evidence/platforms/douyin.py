@@ -27,6 +27,8 @@
 
 import json
 import os
+import subprocess
+import time
 
 from . import register
 from .. import db
@@ -39,6 +41,26 @@ COMMON_UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
              '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36')
 DOUYIN_PROFILE = os.path.expanduser(
     '~/Library/Application Support/音乐证据监测台/douyin-profile')
+
+# v4.30.33：按需拉起 Xvfb 虚拟显示（Linux 无显示环境时）。
+# 不再用 xvfb-run 包裹整个应用——显示层任何问题都会让容器崩溃循环（028/029 事故）。
+_XVFB_PROC = None
+
+
+def _ensure_display():
+    """无 DISPLAY 的 Linux 环境按需启动 Xvfb :99；已有多余进程只启一次。"""
+    global _XVFB_PROC
+    if os.environ.get('DISPLAY'):
+        return True
+    try:
+        _XVFB_PROC = subprocess.Popen(
+            ['Xvfb', ':99', '-screen', '0', '1280x900x24', '-nolisten', 'tcp'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1.2)  # 等 X server 就绪
+        os.environ['DISPLAY'] = ':99'
+        return True
+    except Exception:
+        return False
 
 
 def _load_state():
@@ -256,6 +278,9 @@ def search(song_name, artist='', version='', target_count=300,
     except Exception:
         return [{'error': '未安装 patchright'}]
 
+    if not _ensure_display():
+        return [{'error': '当前环境无显示且 Xvfb 启动失败，无法进行抖音取证'}]
+
     captured_bodies = []
 
     def _on_response(response):
@@ -343,6 +368,9 @@ def parse_video_url(url, headless=True, timeout_ms=20000):
         from patchright.sync_api import sync_playwright
     except Exception as e:
         return {'error': f'未安装 patchright: {e}'}
+
+    if not _ensure_display():
+        return {'error': '当前环境无显示且 Xvfb 启动失败，无法解析抖音链接'}
 
     info = {'music_name': '', 'music_author': '', 'video_blogger': '',
             'video_title': '', 'video_url': ''}

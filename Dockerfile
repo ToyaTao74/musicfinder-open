@@ -23,5 +23,5 @@ ENV MF_HOST=0.0.0.0 \
     MF_BATCH_WORKERS=1
 EXPOSE 3000
 
-# xvfb-run：为 headful 浏览器提供虚拟显示（抖音取证反滑块）
-CMD ["xvfb-run", "-a", "--server-args=-screen 0 1280x900x24", "python", "-u", "app.py"]
+# v4.30.33：普通启动（已验证稳定）；xvfb+xauth 仅作为抖音取证按需拉起 Xvfb 的运行时依赖
+CMD ["python", "-u", "app.py"]
