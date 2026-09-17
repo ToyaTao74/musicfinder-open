@@ -235,7 +235,33 @@ def api_task_start():
 @bp.route('/tasks', methods=['GET'])
 def api_tasks():
     db.init_db()
-    return jsonify({'ok': True, 'data': {'tasks': db.list_tasks(50)}})
+    # v4.30.29：管理弹窗用 ?include_hidden=1 拿含已隐藏（前台删除）的全量列表
+    include_hidden = request.args.get('include_hidden') in ('1', 'true')
+    return jsonify({'ok': True, 'data': {'tasks': db.list_tasks(50, include_hidden=include_hidden)}})
+
+
+@bp.route('/task/<int:task_id>/hide', methods=['POST'])
+def api_task_hide(task_id):
+    """前台删除任务（软删除）：hidden=1，任务与证据数据后台全保留。"""
+    db.init_db()
+    t = db.get_task(task_id)
+    if not t:
+        return jsonify({'ok': False, 'error': '任务不存在'}), 404
+    if t['status'] in ('queued', 'running'):
+        return jsonify({'ok': False, 'error': '任务正在执行中，不能删除；可先停止再删'})
+    db.set_task_hidden(task_id, 1)
+    return jsonify({'ok': True, 'data': {'task_id': task_id, 'hidden': 1}})
+
+
+@bp.route('/task/<int:task_id>/restore', methods=['POST'])
+def api_task_restore(task_id):
+    """管理弹窗里恢复被删除（隐藏）的任务。"""
+    db.init_db()
+    t = db.get_task(task_id)
+    if not t:
+        return jsonify({'ok': False, 'error': '任务不存在'}), 404
+    db.set_task_hidden(task_id, 0)
+    return jsonify({'ok': True, 'data': {'task_id': task_id, 'hidden': 0}})
 
 
 @bp.route('/task/<int:task_id>/progress', methods=['GET'])

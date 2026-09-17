@@ -63,6 +63,7 @@
         <div class="ev-card-bar">
           <h2 class="ev-h2">③ 任务与结果</h2>
           <select id="evTaskSelect" aria-label="选择任务"></select>
+          <button class="button secondary" id="evManageTasks" type="button" title="管理任务：删除（后台保留数据）或恢复">管理</button>
         </div>
         <div id="evTaskStatus" class="ev-task-status"></div>
 
@@ -122,6 +123,24 @@
           <span id="evDouyinStatus" class="ev-modal-status"></span>
           <button class="button secondary" id="evDouyinRefresh" type="button">✅ 我已扫码，刷新状态</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  {# 任务管理弹窗（v4.30.29）：前台删除=软隐藏，后台数据保留，可恢复 #}
+  <div class="ev-modal" id="evTasksModal" hidden role="dialog" aria-labelledby="evTasksTitle">
+    <div class="ev-modal-card">
+      <div class="ev-modal-head">
+        <h3 id="evTasksTitle">🗂 任务管理</h3>
+        <button class="ev-modal-x" id="evTasksClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="ev-modal-body">
+        <p class="ev-modal-intro">删除只影响前台列表，<b>后台数据完整保留</b>（证据记录不丢）。正在执行/排队中的任务不能删除。</p>
+        <div class="ev-tasks-toolbar">
+          <label class="ev-check"><input type="checkbox" id="evTasksShowHidden"><span>显示已删除</span></label>
+          <span id="evTasksCount" class="ev-tasks-count"></span>
+        </div>
+        <div id="evTasksList" class="ev-tasks-list"><p class="ev-modal-note">加载中…</p></div>
       </div>
     </div>
   </div>

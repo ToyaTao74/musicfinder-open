@@ -142,13 +142,20 @@
     const { data } = await api('/api/evidence/tasks');
     state.tasks = data.tasks || [];
     const sel = $('#evTaskSelect');
-    // 兜底：如果 state.taskId 指定的任务不在列表里（极小概率，task 刚提交还没被 list 看到），
-    //       先把这条 option 临时补进去，确保 selector 一定显示得出来
+    const opt = t => `<option value="${t.id}">#${t.id} ${esc(t.song_name)}${t.artist ? ' · ' + esc(t.artist) : ''}</option>`;
+    // 当前任务不在可见列表里时的两种情况：
+    //  a) 刚提交、列表还没刷到 → 占位显示，等下轮轮询补上（state.expectTask 标记）
+    //  b) 任务已被删除（hidden）→ 回退到最新的可见任务，避免 selector 悬空
     if (state.taskId && !state.tasks.find(t => t.id === state.taskId)) {
-      sel.innerHTML = `<option value="${state.taskId}">#${state.taskId}（加载中…）</option>` +
-        state.tasks.map(t => `<option value="${t.id}">#${t.id} ${esc(t.song_name)}${t.artist ? ' · ' + esc(t.artist) : ''}</option>`).join('');
+      if (state.expectTask !== state.taskId) {
+        state.taskId = state.tasks.length ? Math.max(...state.tasks.map(t => t.id)) : 0;
+      }
+    }
+    if (state.taskId && state.tasks.find(t => t.id === state.taskId)) state.expectTask = 0;
+    if (state.taskId && !state.tasks.find(t => t.id === state.taskId)) {
+      sel.innerHTML = `<option value="${state.taskId}">#${state.taskId}（加载中…）</option>` + state.tasks.map(opt).join('');
     } else {
-      sel.innerHTML = state.tasks.map(t => `<option value="${t.id}">#${t.id} ${esc(t.song_name)}${t.artist ? ' · ' + esc(t.artist) : ''}</option>`).join('');
+      sel.innerHTML = state.tasks.map(opt).join('');
     }
     // 兜底取「最大任务号」而非依赖列表顺序：一旦后端排序变化或列表被截断，
     // 也能保证「默认选中最新任务」的语义成立（用户实测曾出现选中旧任务 15 的反馈）
@@ -439,6 +446,61 @@
     }
   }
 
+  // ── v4.30.29 任务管理弹窗 ──────────────────────────────
+  // 前台删除 = 软隐藏（hidden=1），任务与证据数据后台完整保留；可随时恢复。
+  async function openTasksModal() {
+    $('#evTasksModal').hidden = false;
+    await renderTasksModal();
+  }
+
+  async function renderTasksModal() {
+    const list = $('#evTasksList');
+    list.innerHTML = '<p class="ev-modal-note">加载中…</p>';
+    const showHidden = $('#evTasksShowHidden').checked;
+    try {
+      const { data } = await api('/api/evidence/tasks' + (showHidden ? '?include_hidden=1' : ''));
+      const tasks = data.tasks || [];
+      $('#evTasksCount').textContent = `共 ${tasks.length} 个任务`;
+      if (!tasks.length) { list.innerHTML = '<p class="ev-tasks-empty">暂无任务</p>'; return; }
+      list.innerHTML = tasks.map(t => {
+        const isH = !!t.hidden;
+        return `<div class="ev-tasks-row ${isH ? 'is-hidden' : ''}">
+          <div class="ev-tasks-main">
+            <div class="ev-tasks-name">#${t.id} ${esc(t.song_name)}${t.artist ? ' · ' + esc(t.artist) : ''}</div>
+            <div class="ev-tasks-meta">${esc(statusLabel(t.status))} · 发现 ${num(t.discovered || 0)} · ${esc(t.created_at || '')}</div>
+          </div>
+          ${isH
+            ? `<span class="ev-tasks-badge">已删除</span><button class="ev-tasks-btn" data-restore="${t.id}" type="button">恢复</button>`
+            : `<button class="ev-tasks-btn danger" data-del="${t.id}" type="button">删除</button>`}
+        </div>`;
+      }).join('');
+      list.querySelectorAll('[data-del]').forEach(b =>
+        b.addEventListener('click', () => onHideTask(Number(b.dataset.del))));
+      list.querySelectorAll('[data-restore]').forEach(b =>
+        b.addEventListener('click', () => onRestoreTask(Number(b.dataset.restore))));
+    } catch (e) {
+      list.innerHTML = `<p class="ev-modal-note">加载失败：${esc(e.message)}</p>`;
+    }
+  }
+
+  async function onHideTask(id) {
+    if (!confirm(`删除任务 #${id}？\n前台列表不再显示，后台数据完整保留，可在「显示已删除」里恢复。`)) return;
+    try {
+      const r = await api(`/api/evidence/task/${id}/hide`, { method: 'POST' });
+      if (r && r.ok === false) throw new Error(r.error || '删除失败');
+      if (state.taskId === id) { state.taskId = 0; state.expectTask = 0; }
+      await Promise.all([renderTasksModal(), loadTasks()]);
+    } catch (e) { alert('删除失败：' + e.message); }
+  }
+
+  async function onRestoreTask(id) {
+    try {
+      const r = await api(`/api/evidence/task/${id}/restore`, { method: 'POST' });
+      if (r && r.ok === false) throw new Error(r.error || '恢复失败');
+      await Promise.all([renderTasksModal(), loadTasks()]);
+    } catch (e) { alert('恢复失败：' + e.message); }
+  }
+
   // ── 交互绑定 ──
   function bind() {
     $('#evCatalogPick').addEventListener('click', () => $('#evCatalogFile').click());
@@ -450,6 +512,10 @@
       if (e.key === 'Enter') { e.preventDefault(); onDouyinParse(); }
     });
     $('#evRefresh').addEventListener('click', () => { loadStats(); loadTasks(); });
+    // v4.30.29 任务管理弹窗：删除（软隐藏）/恢复，后台数据保留
+    $('#evManageTasks').addEventListener('click', openTasksModal);
+    $('#evTasksClose').addEventListener('click', () => { $('#evTasksModal').hidden = true; });
+    $('#evTasksShowHidden').addEventListener('change', renderTasksModal);
     $('#evTaskSelect').addEventListener('change', e => { state.taskId = Number(e.target.value); state.selected.clear(); loadDashboard(); });
     ['evPlatformFilter', 'evThresholdFilter', 'evPiracyFilter', 'evReviewFilter', 'evTimeFilter', 'evPubFilter', 'evSort'].forEach(id =>
       $('#' + id).addEventListener('change', renderRows));
@@ -527,7 +593,10 @@
       // 旧代码读 r.data.task_ids 恒为空 → 提交新任务后页面停在旧任务并误报
       // 「已自动跳转到新任务 #16」。兼容两种结构，取新任务号最大值。
       const newIds = (r && (r.task_ids || (r.data && r.data.task_ids))) || [];
-      if (newIds.length) state.taskId = Math.max(...newIds);
+      if (newIds.length) {
+        state.taskId = Math.max(...newIds);
+        state.expectTask = state.taskId; // 标记「刚提交」，列表未刷到时 selector 先占位
+      }
       await loadTasks();
       if (r && r.ok === false) {
         msg.textContent = `${r.error || '任务已提交'}；新任务 #${state.taskId} 已加入队列，将在当前任务结束后执行`;

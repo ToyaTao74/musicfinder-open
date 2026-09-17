@@ -246,3 +246,19 @@ body.ev-modal-open { overflow: hidden; }
 .ev-toast-close { background: none; border: 0; color: rgba(255,255,255,.55); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
 .ev-toast-close:hover { color: #fff; }
 @keyframes ev-toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── v4.30.29 任务管理弹窗 ─────────────────────────── */
+.ev-tasks-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px; }
+.ev-tasks-count { font-size: 12px; color: var(--text-tertiary, #888); }
+.ev-tasks-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.ev-tasks-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--glass-border, rgba(0,0,0,.08)); border-radius: 10px; background: var(--bg-elevated, rgba(255,255,255,.6)); }
+.ev-tasks-row.is-hidden { opacity: .55; }
+.ev-tasks-main { flex: 1; min-width: 0; }
+.ev-tasks-name { font-size: 13px; font-weight: 600; color: var(--text-primary, #111); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-tasks-meta { font-size: 11px; color: var(--text-tertiary, #888); margin-top: 2px; }
+.ev-tasks-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(220,38,38,.12); color: #dc2626; font-weight: 700; white-space: nowrap; }
+.ev-tasks-btn { font-size: 12px; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--glass-border, rgba(0,0,0,.12)); background: transparent; color: var(--text-primary, #111); cursor: pointer; white-space: nowrap; transition: background .15s ease; }
+.ev-tasks-btn:hover { background: rgba(0,0,0,.06); }
+.ev-tasks-btn.danger { color: #dc2626; border-color: rgba(220,38,38,.4); }
+.ev-tasks-btn.danger:hover { background: rgba(220,38,38,.1); }
+.ev-tasks-empty { font-size: 13px; color: var(--text-tertiary, #888); text-align: center; padding: 18px 0; }

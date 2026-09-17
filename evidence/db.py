@@ -144,7 +144,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     error       TEXT DEFAULT '',
     created_at  TEXT,
     updated_at  TEXT,
-    finished_at TEXT DEFAULT ''
+    finished_at TEXT DEFAULT '',
+    hidden      INTEGER DEFAULT 0        -- v4.30.29 前台删除=软隐藏，后台数据保留
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
@@ -186,6 +187,11 @@ def init_db(verbose=False):
     conn = get_conn()
     conn.executescript(SCHEMA_SQL)
     conn.commit()
+    # v4.30.29：老库补 hidden 列（前台删除任务=软隐藏，后台数据保留）
+    cols = [r['name'] for r in conn.execute('PRAGMA table_info(tasks)')]
+    if 'hidden' not in cols:
+        conn.execute('ALTER TABLE tasks ADD COLUMN hidden INTEGER DEFAULT 0')
+        conn.commit()
     _migrate(conn, verbose=verbose)
     set_meta('schema_version', str(SCHEMA_VERSION))
     if verbose:
@@ -388,10 +394,22 @@ def get_task(task_id):
     return dict(row) if row else None
 
 
-def list_tasks(limit=50):
-    rows = get_conn().execute(
-        'SELECT * FROM tasks ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
+def list_tasks(limit=50, include_hidden=False):
+    """任务列表。默认不含已隐藏（前台删除）的任务；管理弹窗用 include_hidden=True。"""
+    if include_hidden:
+        rows = get_conn().execute(
+            'SELECT * FROM tasks ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
+    else:
+        rows = get_conn().execute(
+            'SELECT * FROM tasks WHERE hidden=0 ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
     return [dict(r) for r in rows]
+
+
+def set_task_hidden(task_id, hidden=1):
+    """软删除 / 恢复任务。只改 hidden 标记，任务与证据数据全部保留在库里。"""
+    with tx() as conn:
+        conn.execute('UPDATE tasks SET hidden=?, updated_at=? WHERE id=?',
+                     (1 if hidden else 0, now_str(), task_id))
 
 
 def list_evidence(task_id=None, platform='all', threshold='all',
