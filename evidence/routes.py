@@ -264,6 +264,33 @@ def api_task_restore(task_id):
     return jsonify({'ok': True, 'data': {'task_id': task_id, 'hidden': 0}})
 
 
+@bp.route('/tasks/batch-hide', methods=['POST'])
+def api_tasks_batch_hide():
+    """v4.30.31 批量删除/恢复：{task_ids:[...], hidden:1|0}。
+
+    删除（hidden=1）时若有执行中/排队中的任务，整批拒绝并列出阻塞项，
+    避免用户以为全删了实际漏掉几个。
+    """
+    db.init_db()
+    body = request.get_json(silent=True) or {}
+    ids = [int(i) for i in (body.get('task_ids') or []) if str(i).isdigit()]
+    hidden = 1 if body.get('hidden', 1) else 0
+    if not ids:
+        return jsonify({'ok': False, 'error': '未选择任务'}), 400
+    if hidden:
+        blocking = []
+        for i in ids:
+            t = db.get_task(i)
+            if t and t['status'] in ('queued', 'running'):
+                blocking.append(i)
+        if blocking:
+            return jsonify({'ok': False,
+                            'error': f'任务 {blocking} 正在执行/排队中，不能删除'})
+    for i in ids:
+        db.set_task_hidden(i, hidden)
+    return jsonify({'ok': True, 'data': {'updated': len(ids), 'hidden': hidden}})
+
+
 @bp.route('/task/<int:task_id>/progress', methods=['GET'])
 def api_task_progress(task_id):
     db.init_db()

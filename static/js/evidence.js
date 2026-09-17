@@ -448,9 +448,21 @@
 
   // ── v4.30.29 任务管理弹窗 ──────────────────────────────
   // 前台删除 = 软隐藏（hidden=1），任务与证据数据后台完整保留；可随时恢复。
+  // v4.30.31：支持勾选批量删除/恢复（_taskSel 为当前弹窗里的勾选集合）
+  const _taskSel = new Set();
+  let _modalTasks = [];   // 当前弹窗里渲染出来的任务列表（供全选用）
+
   async function openTasksModal() {
     $('#evTasksModal').hidden = false;
+    _taskSel.clear();
     await renderTasksModal();
+  }
+
+  function _updateBatchBtn() {
+    const btn = $('#evTasksBatchBtn');
+    const restore = $('#evTasksShowHidden').checked;
+    btn.textContent = (restore ? '恢复所选(' : '删除所选(') + _taskSel.size + ')';
+    btn.disabled = _taskSel.size === 0;
   }
 
   async function renderTasksModal() {
@@ -460,11 +472,21 @@
     try {
       const { data } = await api('/api/evidence/tasks' + (showHidden ? '?include_hidden=1' : ''));
       const tasks = data.tasks || [];
+      _modalTasks = tasks;
+      // 勾选集合里已不在当前列表的 id 清掉
+      const idSet = new Set(tasks.map(t => t.id));
+      for (const id of [..._taskSel]) if (!idSet.has(id)) _taskSel.delete(id);
       $('#evTasksCount').textContent = `共 ${tasks.length} 个任务`;
-      if (!tasks.length) { list.innerHTML = '<p class="ev-tasks-empty">暂无任务</p>'; return; }
+      $('#evTasksSelAll').checked = tasks.length > 0 && _taskSel.size === tasks.length;
+      if (!tasks.length) {
+        list.innerHTML = '<p class="ev-tasks-empty">暂无任务</p>';
+        _updateBatchBtn();
+        return;
+      }
       list.innerHTML = tasks.map(t => {
         const isH = !!t.hidden;
         return `<div class="ev-tasks-row ${isH ? 'is-hidden' : ''}">
+          <input type="checkbox" class="ev-tasks-ck" data-ck="${t.id}" ${_taskSel.has(t.id) ? 'checked' : ''}>
           <div class="ev-tasks-main">
             <div class="ev-tasks-name">#${t.id} ${esc(t.song_name)}${t.artist ? ' · ' + esc(t.artist) : ''}</div>
             <div class="ev-tasks-meta">${esc(statusLabel(t.status))} · 发现 ${num(t.discovered || 0)} · ${esc(t.created_at || '')}</div>
@@ -474,13 +496,40 @@
             : `<button class="ev-tasks-btn danger" data-del="${t.id}" type="button">删除</button>`}
         </div>`;
       }).join('');
+      list.querySelectorAll('[data-ck]').forEach(cb =>
+        cb.addEventListener('change', () => {
+          const id = Number(cb.dataset.ck);
+          if (cb.checked) _taskSel.add(id); else _taskSel.delete(id);
+          $('#evTasksSelAll').checked = _taskSel.size === tasks.length;
+          _updateBatchBtn();
+        }));
       list.querySelectorAll('[data-del]').forEach(b =>
         b.addEventListener('click', () => onHideTask(Number(b.dataset.del))));
       list.querySelectorAll('[data-restore]').forEach(b =>
         b.addEventListener('click', () => onRestoreTask(Number(b.dataset.restore))));
+      _updateBatchBtn();
     } catch (e) {
       list.innerHTML = `<p class="ev-modal-note">加载失败：${esc(e.message)}</p>`;
     }
+  }
+
+  async function onBatchTasks() {
+    const ids = [..._taskSel];
+    if (!ids.length) return;
+    const restore = $('#evTasksShowHidden').checked;
+    const msg = restore
+      ? `恢复选中的 ${ids.length} 个任务？`
+      : `删除选中的 ${ids.length} 个任务？\n前台列表不再显示，后台数据完整保留，可在「显示已删除」里恢复。`;
+    if (!confirm(msg)) return;
+    try {
+      const r = await api('/api/evidence/tasks/batch-hide', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_ids: ids, hidden: restore ? 0 : 1 })
+      });
+      if (r && r.ok === false) throw new Error(r.error || '操作失败');
+      _taskSel.clear();
+      await Promise.all([renderTasksModal(), loadTasks()]);
+    } catch (e) { alert('操作失败：' + e.message); }
   }
 
   async function onHideTask(id) {
@@ -515,7 +564,14 @@
     // v4.30.29 任务管理弹窗：删除（软隐藏）/恢复，后台数据保留
     $('#evManageTasks').addEventListener('click', openTasksModal);
     $('#evTasksClose').addEventListener('click', () => { $('#evTasksModal').hidden = true; });
-    $('#evTasksShowHidden').addEventListener('change', renderTasksModal);
+    $('#evTasksShowHidden').addEventListener('change', () => { _taskSel.clear(); renderTasksModal(); });
+    $('#evTasksBatchBtn').addEventListener('click', onBatchTasks);
+    $('#evTasksSelAll').addEventListener('change', e => {
+      _taskSel.clear();
+      if (e.target.checked) _modalTasks.forEach(t => _taskSel.add(t.id));
+      document.querySelectorAll('#evTasksList [data-ck]').forEach(cb => { cb.checked = e.target.checked; });
+      _updateBatchBtn();
+    });
     $('#evTaskSelect').addEventListener('change', e => { state.taskId = Number(e.target.value); state.selected.clear(); loadDashboard(); });
     ['evPlatformFilter', 'evThresholdFilter', 'evPiracyFilter', 'evReviewFilter', 'evTimeFilter', 'evPubFilter', 'evSort'].forEach(id =>
       $('#' + id).addEventListener('change', renderRows));

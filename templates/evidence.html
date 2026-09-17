@@ -137,8 +137,10 @@
       <div class="ev-modal-body">
         <p class="ev-modal-intro">删除只影响前台列表，<b>后台数据完整保留</b>（证据记录不丢）。正在执行/排队中的任务不能删除。</p>
         <div class="ev-tasks-toolbar">
+          <label class="ev-check"><input type="checkbox" id="evTasksSelAll"><span>全选</span></label>
           <label class="ev-check"><input type="checkbox" id="evTasksShowHidden"><span>显示已删除</span></label>
           <span id="evTasksCount" class="ev-tasks-count"></span>
+          <button class="ev-tasks-btn danger" id="evTasksBatchBtn" type="button" disabled>删除所选(0)</button>
         </div>
         <div id="evTasksList" class="ev-tasks-list"><p class="ev-modal-note">加载中…</p></div>
       </div>
