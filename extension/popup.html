@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { width: 320px; margin: 0; padding: 14px; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 13px; color: #111; }
+  h3 { margin: 0 0 10px; font-size: 15px; }
+  label { display: block; margin: 8px 0 3px; color: #555; font-size: 12px; }
+  input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; }
+  button { margin-top: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: #f60; color: #fff; font-weight: 700; cursor: pointer; }
+  button.sec { background: #eee; color: #333; }
+  #state { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #f5f5f5; font-size: 12px; line-height: 1.6; }
+  .ok { color: #16a34a; font-weight: 700; }
+  .bad { color: #dc2626; font-weight: 700; }
+</style>
+</head>
+<body>
+  <h3>🎵 MusicFinder 取证助手</h3>
+  <label>云端地址</label>
+  <input id="cloudUrl" placeholder="https://...">
+  <label>部署密钥</label>
+  <input id="key" type="password" placeholder="找管理员要">
+  <label>设备名（哪个 Windows 电脑）</label>
+  <input id="worker" placeholder="win-01">
+  <button id="save">保存并测试连接</button>
+  <button id="saveSec" class="sec">仅保存</button>
+  <div id="state">正在读取设置…</div>
+  <script src="popup.js"></script>
+</body>
+</html>

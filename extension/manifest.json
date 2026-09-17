@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "MusicFinder 抖音取证助手",
+  "version": "1.0.0",
+  "description": "接收 MusicFinder 云端派单，在你真实的浏览器里打开抖音搜索并回传数据。真实指纹 + 家庭 IP，滑块真人过。",
+  "permissions": ["tabs", "storage", "alarms"],
+  "host_permissions": [
+    "https://www.douyin.com/*",
+    "https://musicfinder-292238-8-1463776169.sh.run.tcloudbase.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "MusicFinder 取证助手" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.douyin.com/*"],
+      "js": ["inject_main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.douyin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

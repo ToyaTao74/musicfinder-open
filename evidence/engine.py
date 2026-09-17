@@ -9,6 +9,37 @@ from . import db, detect, classify
 from .platforms import run_platform
 
 
+def _run_via_extension(task_id, song_name, artist, opts):
+    """v4.30.34：douyin 优先派给在线的浏览器扩展（真实指纹+家庭IP+滑块真人过）。
+
+    返回候选列表 = 扩展抓取成功；None = 无扩展在线/超时/报错（回退服务端 Xvfb 抓取）。
+    """
+    try:
+        from . import ext_jobs
+        from .platforms.douyin import _parse_aweme_bodies
+    except Exception:
+        return None
+    if not ext_jobs.worker_online():
+        return None
+    target = int((opts or {}).get('target_count') or 300)
+    info = ext_jobs.assign(task_id, song_name, artist, target)
+    if not info:
+        return None
+    db.update_task(task_id, message=f'已派给扩展[{info["worker"]}]，在你的浏览器里抓取中…')
+    status, payload = ext_jobs.wait_result(task_id, timeout=ext_jobs.EXT_TIMEOUT)
+    ext_jobs.release(task_id)
+    if status != 'ok':
+        # 回退服务端抓取（超时/扩展报错），如实记录原因
+        reason = payload or '扩展超时'
+        db.update_task(task_id, message=f'扩展抓取未完成（{reason}），转云端抓取…')
+        return None
+    try:
+        return _parse_aweme_bodies(payload, song_name, artist, target)
+    except Exception as e:
+        db.update_task(task_id, message=f'扩展数据解析失败: {e}，转云端抓取…')
+        return None
+
+
 def run_task(task_id, song_name, artist='', version='', platforms=None, opts=None):
     from . import detect as D
     platforms = platforms or D.EVIDENCE_PLATFORMS
@@ -21,7 +52,11 @@ def run_task(task_id, song_name, artist='', version='', platforms=None, opts=Non
 
     for plat in platforms:
         try:
-            cands = run_platform(plat, song_name, artist=artist, version=version, opts=opts)
+            cands = None
+            if plat == 'douyin':
+                cands = _run_via_extension(task_id, song_name, artist, opts)
+            if cands is None:
+                cands = run_platform(plat, song_name, artist=artist, version=version, opts=opts)
         except Exception as e:
             plat_errors.append(f'{D.PLATFORM_NAMES.get(plat, plat)} 异常: {e}')
             db.update_task(task_id, message=f'{D.PLATFORM_NAMES.get(plat, plat)} 异常: {e}')

@@ -291,6 +291,59 @@ def api_tasks_batch_hide():
     return jsonify({'ok': True, 'data': {'updated': len(ids), 'hidden': hidden}})
 
 
+# ── v4.30.34 浏览器扩展辅助抓取 ──────────────────────────────
+# 扩展取件 → 用户真实浏览器开抖音搜索页抓取 → 回传签名接口响应原文 →
+# 云端复用 _parse_aweme_bodies 解析入库。鉴权同 db_export（部署密钥）。
+# 引擎是唯一派单方（engine._run_via_extension → ext_jobs.assign），
+# 扩展只通过 /ext/poll 取件 + /ext/report 回传，无竞争。
+
+def _ext_key_ok():
+    key = (request.args.get('key') or request.headers.get('X-MF-Key') or '').strip()
+    expect = (os.environ.get('MUSICFINDER_CLOUDBASE_TOKEN') or '').strip() \
+        or (getattr(__import__('config'), 'CLOUDBASE_TOKEN', '') or '').strip()
+    return bool(expect) and key == expect
+
+
+@bp.route('/ext/poll', methods=['GET'])
+def api_ext_poll():
+    """扩展轮询取件：返回最早一个未投递的任务；没有则 data=null。"""
+    if not _ext_key_ok():
+        return jsonify({'ok': False, 'error': '密钥无效'}), 403
+    from . import ext_jobs
+    worker = (request.args.get('worker') or 'ext').strip()[:40] or 'ext'
+    info = ext_jobs.pick(worker)
+    if info:
+        db.update_task(info['task_id'], status=db.TASK_RUNNING,
+                       message=f'已派给扩展[{worker}]，在你的浏览器里抓取中…')
+    return jsonify({'ok': True, 'data': info})
+
+
+@bp.route('/ext/report', methods=['POST'])
+def api_ext_report():
+    """扩展回传：{task_id, bodies:[签名接口响应原文...], done:bool, error:str}"""
+    if not _ext_key_ok():
+        return jsonify({'ok': False, 'error': '密钥无效'}), 403
+    from . import ext_jobs
+    body = request.get_json(silent=True) or {}
+    task_id = body.get('task_id')
+    if not task_id:
+        return jsonify({'ok': False, 'error': '缺少 task_id'}), 400
+    ok = ext_jobs.report(int(task_id), bodies=body.get('bodies') or [],
+                         done=bool(body.get('done')), error=body.get('error') or '')
+    return jsonify({'ok': ok, 'data': {'received': True}})
+
+
+@bp.route('/ext/status', methods=['GET'])
+def api_ext_status():
+    """扩展设置页连通性测试 + 云端扩展在线状态。"""
+    if not _ext_key_ok():
+        return jsonify({'ok': False, 'error': '密钥无效'}), 403
+    from . import ext_jobs
+    worker = (request.args.get('worker') or 'ext').strip()[:40] or 'ext'
+    ext_jobs.touch_worker(worker)
+    return jsonify({'ok': True, 'data': ext_jobs.status()})
+
+
 @bp.route('/task/<int:task_id>/progress', methods=['GET'])
 def api_task_progress(task_id):
     db.init_db()
