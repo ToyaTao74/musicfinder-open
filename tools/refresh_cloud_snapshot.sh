@@ -21,7 +21,7 @@ if [ -z "${TOKEN:-}" ]; then
     echo "[X] 读不到部署密钥 ($CFG 的 cloudbase.token)"; exit 1
 fi
 
-FILES="batch_v2.db monitor.db evidence.db performer_alias_suggestions.json merge_map.json douyin_state.json"
+FILES="batch_v2.db monitor.db evidence.db performer_alias_suggestions.json merge_map.json douyin_state.json .secret"
 mkdir -p "$STG/snapshot"
 for f in $FILES; do
     if curl -sf -m 120 "$CLOUD_URL/api/admin/db_export?name=$f&key=$TOKEN" -o "$STG/snapshot/$f"; then

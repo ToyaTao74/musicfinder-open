@@ -64,7 +64,14 @@
         try {
             const r = await fetch('/api/artist_home?platform=' + encodeURIComponent(platform)
                                   + '&name=' + encodeURIComponent(name));
-            const d = await r.json();
+            const d = await r.json().catch(() => ({}));
+            if (r.status === 401) {
+                // v4.30.35：登录态失效（如云端重新部署后）不再死等，直接拉起登录框
+                alert('登录已失效，请重新登录后再查看艺人主页');
+                const ov = document.getElementById('authOverlay');
+                if (ov) ov.style.display = 'flex';
+                return;
+            }
             if (d.ok && d.url) {
                 window.open(d.url, '_blank');
             } else {
