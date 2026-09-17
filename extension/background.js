@@ -6,10 +6,16 @@ let current = null;   // {task_id, tabId, target_count, sentBodies}
 
 async function cfg() {
   const s = await chrome.storage.local.get(['cloudUrl', 'key', 'worker']);
+  let worker = s.worker;
+  if (!worker) {
+    // 首次运行自动生成设备名（如 win-a3f9），用户零配置
+    worker = 'win-' + Math.random().toString(16).slice(2, 6);
+    await chrome.storage.local.set({ worker });
+  }
   return {
     cloudUrl: (s.cloudUrl || DEFAULT_CLOUD).replace(/\/+$/, ''),
     key: s.key || DEFAULT_KEY,
-    worker: s.worker || 'win-ext',
+    worker,
   };
 }
 

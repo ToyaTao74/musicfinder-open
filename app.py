@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.35'
+APP_VERSION        = '4.30.36'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.35 会话密钥随快照持久化（修复每次重新部署后全员被踢出登录）；艺人主页 401 时直接拉起登录框引导重登'
+APP_VERSION_NAME   = 'v4.30.36 扩展一键安装：/ext/ 页面下载 setup.bat 双击即完成安装（自动下载文件+建桌面图标+零配置设备名），无需开发者模式'
 APP_VERSION_DATE   = '2026-09-14'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -1091,6 +1091,98 @@ def api_admin_db_export():
             pass
     from flask import send_file
     return send_file(path, as_attachment=True, download_name=name)
+
+
+# ── v4.30.36 扩展一键安装（Windows 极简流程）──────────────────
+# 用户只需：打开 /ext/ 页面 → 下载 setup.bat → 双击。脚本自动下载扩展文件、
+# 找到 Edge/Chrome、在桌面生成「MusicFinder 抓取台」图标（--load-extension 加载），
+# 完全绕开 chrome://extensions 开发者模式手动加载流程。
+_EXT_FILE_WHITELIST = ('manifest.json', 'background.js', 'content.js',
+                       'inject_main.js', 'popup.html', 'popup.js', 'README.md')
+
+
+@app.route('/ext/', methods=['GET'])
+@app.route('/ext', methods=['GET'])
+def ext_setup_page():
+    from flask import render_template_string
+    return render_template_string("""
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MusicFinder 取证助手 · 一键安装</title>
+<style>
+ body{font-family:-apple-system,"Microsoft YaHei",sans-serif;max-width:640px;margin:40px auto;padding:0 20px;color:#1c2433;line-height:1.7}
+ .btn{display:inline-block;background:#f60;color:#fff;font-size:18px;font-weight:700;padding:14px 34px;border-radius:12px;text-decoration:none;margin:10px 0}
+ .step{background:#f6f7fb;border-radius:12px;padding:14px 18px;margin:12px 0}
+ .num{display:inline-block;background:#f60;color:#fff;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;font-weight:700;margin-right:8px}
+ code{background:#eef;padding:1px 6px;border-radius:6px}
+</style></head><body>
+<h1>🎵 取证助手 · 一键安装</h1>
+<p>在你的 Windows 电脑上完成以下两步（全程约 30 秒），之后抖音取证任务会自动派到这台电脑的真实浏览器里执行。</p>
+<div class="step"><span class="num">1</span>点击按钮，下载安装脚本（浏览器可能提示保留文件，选「保留」）<br>
+ <a class="btn" href="/ext/setup.bat">⬇ 下载一键安装.bat</a></div>
+<div class="step"><span class="num">2</span>双击运行刚下载的 <code>setup.bat</code>，看到「★ 安装成功」即完成。桌面会出现 <b>「MusicFinder」</b> 图标——以后就用它打开浏览器（保持开着即可自动接单）。</div>
+<p style="color:#888;font-size:13px">无需配置任何账号密钥，设备名自动生成。首次抓取抖音时需要在该浏览器里登录一次抖音（扫码即可，登录态会一直保留）。遇到滑块验证亲手滑一下。</p>
+</body></html>
+""")
+
+
+@app.route('/ext/files/<path:name>', methods=['GET'])
+def ext_file(name):
+    from flask import send_from_directory, abort
+    if name not in _EXT_FILE_WHITELIST:
+        abort(404)
+    return send_from_directory(os.path.join(BASE_DIR, 'extension'), name)
+
+
+@app.route('/ext/setup.bat', methods=['GET'])
+def ext_setup_bat():
+    base = request.url_root.rstrip('/')
+    lines = [
+        '@echo off',
+        'chcp 65001 >nul',
+        'setlocal',
+        'set "DEST=%LOCALAPPDATA%\\MusicFinderExt"',
+        f'set "BASE={base}"',
+        'echo ====================================',
+        'echo  MusicFinder 取证助手 一键安装',
+        'echo ====================================',
+        'mkdir "%DEST%" >nul 2>&1',
+        'set FILES=manifest.json background.js content.js inject_main.js popup.html popup.js',
+        'for %%f in (%FILES%) do (',
+        '  curl -fsS -o "%DEST%\\%%f" "%BASE%/ext/files/%%f"',
+        '  if errorlevel 1 ( echo [失败] 下载 %%f 出错，请检查网络后重试 & pause & exit /b 1 )',
+        ')',
+        'echo [1/3] 扩展文件下载完成',
+        'set "BROWSER="',
+        'if exist "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" set "BROWSER=%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"',
+        'if not defined BROWSER if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" set "BROWSER=%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"',
+        'if not defined BROWSER if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" set "BROWSER=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"',
+        'if not defined BROWSER if exist "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" set "BROWSER=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"',
+        'if not defined BROWSER ( echo [失败] 没找到 Edge 或 Chrome，请先安装其一 & pause & exit /b 1 )',
+        'echo [2/3] 使用浏览器: %BROWSER%',
+        'set "PS1=%DEST%\\mkshortcut.ps1"',
+        '> "%PS1%" echo $ws = New-Object -ComObject WScript.Shell',
+        '>> "%PS1%" echo $desk = [Environment]::GetFolderPath("Desktop")',
+        '>> "%PS1%" echo $lad = [Environment]::GetFolderPath("LocalApplicationData")',
+        '>> "%PS1%" echo $lnk = $ws.CreateShortcut($desk + "\\MusicFinder.lnk")',
+        '>> "%PS1%" echo $lnk.TargetPath = "%BROWSER%"',
+        '>> "%PS1%" echo $lnk.Arguments = "-user-data-dir=" + $lad + "\\MusicFinderExt\\profile -load-extension=" + $lad + "\\MusicFinderExt -no-first-run"',
+        '>> "%PS1%" echo $lnk.WorkingDirectory = "%BROWSER%"',
+        '>> "%PS1%" echo $lnk.Description = "MusicFinder Douyin"',
+        '>> "%PS1%" echo $lnk.Save()',
+        'powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"',
+        'if errorlevel 1 ( echo [失败] 创建桌面图标出错 & pause & exit /b 1 )',
+        'del "%PS1%" >nul 2>&1',
+        'echo [3/3] 桌面图标已创建',
+        'echo.',
+        'echo ★ 安装成功！桌面双击「MusicFinder」打开浏览器并保持开着即可自动接单。',
+        'echo ★ 首次抓取抖音时需在该浏览器里扫码登录一次抖音。',
+        'pause',
+    ]
+    from flask import Response
+    body = '\r\n'.join(lines) + '\r\n'
+    return Response(body, mimetype='application/octet-stream',
+                    headers={'Content-Disposition': 'attachment; filename="setup.bat"'})
 
 
 @app.route('/api/admin/users', methods=['GET'])
