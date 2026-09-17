@@ -4,21 +4,10 @@
 (function () {
     'use strict';
 
-    // ── 主题切换（与首页一致） ──
-    const THEME_KEY = 'theme';
+    // ── 主题：v4.30.27 起固定为白色（light），不再切换 ──
     const html = document.documentElement;
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved) html.setAttribute('data-theme', saved);
-    const themeToggle = document.getElementById('themeToggle');
-    // 仅独立 /batch 页自行处理主题；首页由 app.js 统一接管，避免重复绑定导致切换失效
-    if (themeToggle && window.location.pathname === '/batch') {
-        themeToggle.addEventListener('click', function () {
-            const cur = html.getAttribute('data-theme');
-            const next = cur === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', next);
-            localStorage.setItem(THEME_KEY, next);
-        });
-    }
+    html.setAttribute('data-theme', 'light');
+    localStorage.removeItem('theme');
 
     const PLATFORMS = [
         { code: 'qq', name: 'QQ音乐' },

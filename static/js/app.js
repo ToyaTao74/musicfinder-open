@@ -142,7 +142,6 @@ function ensureResultsTable() {
 }
 const resultsBody = ensureResultsTable();
 const toast = $('#toast');
-const themeToggle = $('#themeToggle');
 
 let allResults = [];          // 聚合后的歌曲行
 let flatResults = [];         // 原始平台行（用于导出/统计）
@@ -176,39 +175,14 @@ const SORTABLE = {
 // 列宽已改为自适应布局，不再使用固定列宽/拖拽
 let _suppressSort = false;
 
-// ── 主题切换（light / dark / system 三态循环）──
-// data-theme 存「解析后的实际配色」（light/dark，供 CSS 用）；
-// data-theme-mode 存「用户意图」（light/dark/system，供图标与逻辑用）。
-const _themeMq = window.matchMedia('(prefers-color-scheme: dark)');
-function _resolveTheme(mode) {
-    if (mode === 'system') return _themeMq.matches ? 'dark' : 'light';
-    return mode; // 'light' | 'dark'
-}
-function _applyTheme(mode) {
-    mode = mode || 'system';
-    const resolved = _resolveTheme(mode);
+// ── 主题：v4.30.27 起固定为白色（light），不再提供明暗切换 ──
+// 兼容处理：清掉老用户 localStorage 里残留的 dark 设置，强制 light。
+(function () {
     const html = document.documentElement;
-    html.setAttribute('data-theme', resolved);
-    html.setAttribute('data-theme-mode', mode);
-    localStorage.setItem('theme', mode);
-    themeToggle.title = '当前主题：' + (mode === 'system' ? '跟随系统' : (mode === 'dark' ? '暗色' : '亮色'));
-}
-// v4.27.12：只两态切换 light ↔ dark（去掉旧的 system→light 中转）。
-// 默认值仍可保留 system（用户首次访问时不强行覆盖系统偏好），但点过按钮后
-// 不再回到 system —— 用户反馈「电脑图标是啥意思」，system 状态已用图标表达不清。
-themeToggle.addEventListener('click', () => {
-    const mode = document.documentElement.getAttribute('data-theme-mode') || 'light';
-    const next = mode === 'dark' ? 'light' : 'dark';
-    _applyTheme(next);
-});
-// 初始化：默认跟随系统（首屏即贴合用户系统配色）
-_applyTheme(localStorage.getItem('theme') || 'system');
-// system 态下，系统配色变化时实时跟随
-_themeMq.addEventListener('change', () => {
-    if ((document.documentElement.getAttribute('data-theme-mode') || 'system') === 'system') {
-        _applyTheme('system');
-    }
-});
+    html.setAttribute('data-theme', 'light');
+    html.setAttribute('data-theme-mode', 'light');
+    localStorage.removeItem('theme');
+})();
 
 // ── 标签页切换 ──
 document.querySelectorAll('.tab-btn').forEach(btn => {
