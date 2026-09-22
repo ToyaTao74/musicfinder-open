@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.36'
+APP_VERSION        = '4.30.37'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.36 扩展一键安装：/ext/ 页面下载 setup.bat 双击即完成安装（自动下载文件+建桌面图标+零配置设备名），无需开发者模式'
-APP_VERSION_DATE   = '2026-09-14'
+APP_VERSION_NAME   = 'v4.30.37 QQ"在架"严格化：交互式搜索补查 action.switch bit12 播放开关，搜得到但已不可播的软下架翻为"已下架"，让"在架"=实际可播'
+APP_VERSION_DATE   = '2026-09-21'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -2472,7 +2472,7 @@ def _qq_availability(song):
     ⚠️ 2026-09-02 修正：alertid=11 只表示「点击时弹版权提示框」（未登录/VIP 提示都会
     触发），**不代表下架**——实测 alertid=11 的歌混着「真下架」与「网页可播」两种
     （如 0028SkaF2HoELK 新不了情/黄小琥，网页可播却 alertid=11）。因此本函数的
-    「已下架」只是**嫌疑初判**，search_qq 末尾会用 _qq_verify_downgraded 二次核验
+    「已下架」只是**嫌疑初判**，search_qq 末尾会用 _qq_verify_playable 双向核验
     （真判据 = 详情接口 action.switch 的 bit12 在线播放开关）后再定稿。
     """
     def _i(v):
@@ -2488,7 +2488,7 @@ def _qq_availability(song):
         msgid = _i(song.get('msgid'))
         payplay = _i(pay.get('payplay'))
         if alertid == 11:
-            return '已下架'      # 嫌疑标记，待 _qq_verify_downgraded 核验
+            return '已下架'      # 嫌疑标记，待 _qq_verify_playable 核验
         if payplay == 0 and msgid == 0:
             return '已下架'      # 同上
         # payplay=1 只表示 VIP 曲目，QQ 上绝大多数歌都是，属正常上架
@@ -2499,39 +2499,53 @@ def _qq_availability(song):
         return ''
 
 
-def _qq_verify_downgraded(results, cookie_str=''):
-    """对初判「已下架」的 QQ 歌做二次核验（v4.29.2 误判修复）。
+QQ_PLAYABLE_VERIFY_CAP = 40  # 单次搜索最多核验播放开关的条数（保护批量请求量）
 
-    真正的下架判据 = 详情接口（fcg_play_single_song）返回 action.switch 的
-    bit12(0x1000)「在线播放开关」：
-      bit12=1 → 在线可播；bit12=0 → 真下架。
-    三方实测（2026-09-02）：正常可播/网页可播的歌 bit12=1，
-    真下架（罗大佑·劫后重逢 0012D6Lc00jqih）bit12=0，唯一差异位就是它。
 
-    搜索接口不返回 action.switch，故对「已下架」嫌疑歌逐个补查详情。
-    「已下架」嫌疑在实际结果里占比很小（通常 0~3 首/页），请求量可控。
+def _qq_verify_playable(results, cookie_str='', bidirectional=True,
+                        cap=QQ_PLAYABLE_VERIFY_CAP):
+    """双向核验 QQ 单曲「实际可播」状态（v4.30.37）。
+
+    真判据 = 详情接口 fcg_play_single_song 的 action.switch bit12(0x1000) 在线播放开关：
+      bit12=1 → 实际可播；bit12=0 → 真下架（含「搜索仍返回但已不可播」的软下架）。
+    搜索接口不返回 switch，故对头部候选逐首补查：
+      - 初判「已下架」嫌疑：bit12=1 → 翻回「在架」（防误杀）
+      - 初判「在架/在架(VIP)」：bit12=0 → 翻成「已下架」（让"在架"严格等于"实际可播"）
+    bidirectional=False（批量路径）只做前者（嫌疑纠偏），不反向翻下架，省请求也
+    避免批量场景下的反向误杀。
+    只核验前 cap 条（按相关度排序的头部结果），其余保留搜索初判，请求量可控。
     """
-    suspects = [r for r in results
-                if (r.get('availability') == '已下架') and r.get('_songmid')]
-    if not suspects:
+    targets = [r for r in results[:cap] if r.get('_songmid')]
+    if not targets:
         return
     headers = {'User-Agent': COMMON_UA, 'Referer': 'https://y.qq.com/'}
     if cookie_str:
         headers['Cookie'] = cookie_str
-    for i, r in enumerate(suspects):
+    for i, r in enumerate(targets):
         try:
             resp = requests.get(
                 'https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg',
                 params={'songmid': r['_songmid'], 'format': 'json', 'platform': 'yqq'},
                 headers=headers, timeout=10)
-            song = (resp.json().get('data') or [{}])[0]
+            data = resp.json().get('data') or []
+            if not data:
+                continue  # 详情无返回，保守跳过，不误判
+            song = data[0]
             switch = ((song.get('action') or {}).get('switch')) or 0
             if switch & 0x1000:
-                r['availability'] = '在架'
+                # 实际可播：把嫌疑「已下架」翻回在架；在架/VIP 保持
+                if r.get('availability') == '已下架':
+                    r['availability'] = '在架'
+            else:
+                # 不可播：双向模式才把在架翻下架，使"在架"严格表示可播；
+                # 单向（批量）保留宽松初判，只纠错误杀，不引入反向误杀风险
+                if bidirectional and (r.get('availability') or '').startswith('在架'):
+                    r['availability'] = '已下架'
         except Exception as e:
-            print(f"[QQ] 下架核验失败 {r.get('_songmid')}: {e}")
-        if i < len(suspects) - 1:
-            time.sleep(0.15)   # 轻微间隔防风控
+            print(f"[QQ] 播放开关核验失败 {r.get('_songmid')}: {e}")
+            # 核验异常：保守保留原状态，不误杀也不误放
+        if i < len(targets) - 1:
+            time.sleep(0.12)   # 轻微间隔防风控
 
 
 def _search_qq_smartbox(keyword, max_results=10):
@@ -2586,10 +2600,12 @@ def _search_qq_smartbox(keyword, max_results=10):
     return out
 
 
-def search_qq(keyword, max_results=30):
+def search_qq(keyword, max_results=30, verify_playable=True):
     """QQ音乐搜索（支持多页抓取）。
 
     正式搜索被风控打空时自动降级到 _search_qq_smartbox（见该函数注释）。
+    verify_playable=True（交互式）：对头部候选补查 bit12 播放开关，让"在架"=实际可播；
+    False（批量路径）：只纠"已下架"误杀，不反向翻，省请求。
     """
     results = []
     page_size = 30
@@ -2659,12 +2675,13 @@ def search_qq(keyword, max_results=30):
             _fetch_qq_details(results[:SEARCH_ENRICH_CAP], cookie_str)
         except Exception as e:
             print(f'[QQ] details 抓取失败(词曲等): {e}')
-        # v4.29.2：alertid=11 ≠ 已下架（未登录/VIP 提示也会触发），对嫌疑歌用
-        # 详情接口 action.switch bit12（在线播放开关）二次核验后再定稿，防误标
+        # v4.30.37：让"在架"严格等于"实际可播"——对头部候选补查 action.switch bit12
+        # 在线播放开关，bit12=0 的「在架/VIP」翻成「已下架」（搜得到但已不可播的软下架）。
+        # 批量路径传 verify_playable=False，只纠"已下架"误杀、不反向翻，省请求。
         try:
-            _qq_verify_downgraded(results, cookie_str)
+            _qq_verify_playable(results, cookie_str, bidirectional=verify_playable)
         except Exception as e:
-            print(f'[QQ] 下架核验异常: {e}')
+            print(f'[QQ] 播放开关核验异常: {e}')
     return results
 
 

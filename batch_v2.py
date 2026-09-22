@@ -1016,7 +1016,7 @@ class _BatchV2Engine:
         comp = (item.get('composer') or '').strip()
         try:
             if platform == 'qq':
-                res = self.app_module.search_qq(f'{song} {perf}'.strip(), 30)
+                res = self.app_module.search_qq(f'{song} {perf}'.strip(), 30, verify_playable=False)
             else:
                 res = self.app_module.search_kugou(f'{song} {perf}'.strip(), 30, light=True)
         except Exception:
@@ -1100,7 +1100,7 @@ class _BatchV2Engine:
                 return {'state': 'blocked', 'picked': None}
             try:
                 if code == 'qq':
-                    res = app.search_qq(kw, 30)              # search_qq 本身不抓详情
+                    res = app.search_qq(kw, 30, verify_playable=False)  # 批量关反向核验，保吞吐
                 else:
                     res = app.search_kugou(kw, 30, light=True)
             except Exception as e:
@@ -1177,7 +1177,7 @@ class _BatchV2Engine:
             def _try(kw):
                 try:
                     if miss_code == 'qq':
-                        res = app.search_qq(kw, 30)
+                        res = app.search_qq(kw, 30, verify_playable=False)
                     else:
                         res = app.search_kugou(kw, 30, light=True)
                 except Exception:
