@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.37'
+APP_VERSION        = '4.30.38'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.37 QQ"在架"严格化：交互式搜索补查 action.switch bit12 播放开关，搜得到但已不可播的软下架翻为"已下架"，让"在架"=实际可播'
-APP_VERSION_DATE   = '2026-09-21'
+APP_VERSION_NAME   = 'v4.30.38 酷狗"在架"严格化：交互式搜索补查 play/getdata 播放地址，搜得到但已不可播的软下架翻为"已下架"，对齐 QQ 的"在架=实际可播"'
+APP_VERSION_DATE   = '2026-09-22'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -3207,12 +3207,16 @@ def _search_kugou_songsearch(keyword, max_results=20):
     return out
 
 
-def search_kugou(keyword, max_results=30, light=False):
+def search_kugou(keyword, max_results=30, light=False, verify_playable=True):
     """酷狗音乐搜索（支持多页抓取）
 
     light=True：只返回搜索列表（歌名/歌手/专辑/hash/album_id/mixsongid），
     跳过 6 个详情接口。用于「监控建档」批量匹配 4000 首——建档只需要锁定
     平台 ID，不需要收藏/评论/版权，跳过后单首耗时从 ~6s 降到 ~0.5s。
+
+    verify_playable=True（默认，交互式搜索走此路径）：用 play/getdata 核验
+    实际可播开关，让「在架」= 实际可播、搜到但不可播的软下架翻「已下架」。
+    light=True 会提前 return，不会触发核验（保批量吞吐）。
     """
     results = []
     page_size = 20
@@ -3238,6 +3242,21 @@ def search_kugou(keyword, max_results=30, light=False):
             for item in info_list:
                 if len(results) >= max_results:
                     break
+                # v4.30.38：酷狗「在架」严格化。搜索接口自带 bitrate/filesize，
+                # 有音频文件(bitrate>0 且 filesize>0)=实际可播→在架；
+                # 两个都为 0=软下架（搜得到但无音频）→已下架；
+                # 字段缺失则不判(留 None)，交回旧逻辑补「在架」，避免误杀。
+                _bt = _safe_int(item.get('bitrate'))
+                _fs = _safe_int(item.get('filesize'))
+                if verify_playable:
+                    if _bt and _fs:
+                        _avail = '在架'
+                    elif _bt == 0 and _fs == 0:
+                        _avail = '已下架'
+                    else:
+                        _avail = None
+                else:
+                    _avail = None
                 results.append({
                     'song_name': item.get('songname', ''),
                     'performer': item.get('singername', ''),
@@ -3254,11 +3273,14 @@ def search_kugou(keyword, max_results=30, light=False):
                     'comment_count': None,
                     'share_count': None,
                     'record_label': None,
+                    'availability': _avail,
                     '_hash': item.get('hash', ''),
                     '_album_id': item.get('album_id', ''),
                     '_mixsongid': item.get('album_audio_id', ''),
                     # v4.25.12：时长维度（秒）。酷狗搜索返回自带 duration。
                     'duration': _safe_int(item.get('duration')),
+                    '_bitrate': _bt,
+                    '_filesize': _fs,
                 })
                 # 酷狗搜索结果自带 ownercount（被收藏/拥有的累计用户数）→ 作为「热度」列
                 # 实时「在听」人数走 listening_user_rank 接口（见 _fetch_kugou_listening，免登录）

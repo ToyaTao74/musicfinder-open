@@ -1018,7 +1018,7 @@ class _BatchV2Engine:
             if platform == 'qq':
                 res = self.app_module.search_qq(f'{song} {perf}'.strip(), 30, verify_playable=False)
             else:
-                res = self.app_module.search_kugou(f'{song} {perf}'.strip(), 30, light=True)
+                res = self.app_module.search_kugou(f'{song} {perf}'.strip(), 30, light=True, verify_playable=False)
         except Exception:
             return
         if not res:
@@ -1102,7 +1102,7 @@ class _BatchV2Engine:
                 if code == 'qq':
                     res = app.search_qq(kw, 30, verify_playable=False)  # 批量关反向核验，保吞吐
                 else:
-                    res = app.search_kugou(kw, 30, light=True)
+                    res = app.search_kugou(kw, 30, light=True, verify_playable=False)
             except Exception as e:
                 self.gate.report(code, False)
                 return {'state': 'error', 'picked': None, 'err': repr(e)[:120]}
@@ -1179,7 +1179,7 @@ class _BatchV2Engine:
                     if miss_code == 'qq':
                         res = app.search_qq(kw, 30, verify_playable=False)
                     else:
-                        res = app.search_kugou(kw, 30, light=True)
+                        res = app.search_kugou(kw, 30, light=True, verify_playable=False)
                 except Exception:
                     return None
                 if not res:

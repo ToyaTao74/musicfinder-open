@@ -127,7 +127,7 @@ def _search_platform(platform, keyword, limit=20):
         if platform == 'qq':
             res = a.search_qq(keyword, limit)
         elif platform == 'kugou':
-            res = a.search_kugou(keyword, limit)
+            res = a.search_kugou(keyword, limit, verify_playable=False)
         elif platform == 'netease':
             res = a.search_netease(keyword, limit)
         else:
