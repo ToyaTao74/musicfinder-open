@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.38'
+APP_VERSION        = '4.30.39'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.38 酷狗"在架"严格化：交互式搜索补查 play/getdata 播放地址，搜得到但已不可播的软下架翻为"已下架"，对齐 QQ 的"在架=实际可播"'
-APP_VERSION_DATE   = '2026-09-22'
+APP_VERSION_NAME   = 'v4.30.39 QQ搜索补充新版 DoSearch：修复 client_search_cp 对低热度歌（如「拜托/麦手」）漏检导致误判"未收录"的问题'
+APP_VERSION_DATE   = '2026-09-24'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
@@ -2600,6 +2600,83 @@ def _search_qq_smartbox(keyword, max_results=10):
     return out
 
 
+def _search_qq_v2(keyword, max_results=30):
+    """QQ 音乐新版搜索（musicu.fcg DoSearchForQQMusicDesktop）。
+
+    实测（2026-09-24）旧版 client_search_cp 对「拜托 / 麦手」这类低热度曲目
+    经常不在前 30 条返回，导致 MF 误判「QQ 未收录」；新版 DoSearch 能正确返回
+    且结果自带 action.switch 在线播放开关，可直接判定真实可播状态。
+    本函数作为 search_qq 的补充来源，与旧版结果按 songmid 去重合并。
+    """
+    try:
+        payload = {
+            'req_0': {
+                'module': 'music.search.SearchCgiService',
+                'method': 'DoSearchForQQMusicDesktop',
+                'param': {
+                    'num_per_page': min(50, max(30, max_results)),
+                    'page_num': 1,
+                    'query': keyword,
+                    'search_type': 0,
+                }
+            }
+        }
+        resp = requests.get(
+            'https://u.y.qq.com/cgi-bin/musicu.fcg',
+            params={'format': 'json', 'data': json.dumps(payload, ensure_ascii=False)},
+            headers={'User-Agent': COMMON_UA, 'Referer': 'https://y.qq.com/'},
+            timeout=15)
+        data = resp.json()
+        song_list = (data.get('req_0', {}).get('data', {}).get('body', {}).get('song', {}).get('list', [])) or []
+        if not song_list:
+            return []
+    except Exception as e:
+        print(f'[QQ] DoSearch error: {e}')
+        return []
+
+    out = []
+    for song in song_list[:max_results]:
+        action = song.get('action') or {}
+        switch = action.get('switch') or 0
+        pay = song.get('pay') or {}
+        # DoSearch 自带 switch bit12，比 client_search_cp 的 alertid/payplay 更准
+        if switch and not (switch & 0x1000):
+            availability = '已下架'
+        elif pay.get('pay_play') == 1 or pay.get('payplay') == 1:
+            availability = '在架(VIP)'
+        else:
+            availability = '在架'
+
+        singers = '/'.join(s.get('name', '') for s in song.get('singer', []))
+        songmid = song.get('mid', '')
+        album_info = song.get('album') or {}
+        pubtime = song.get('pubtime')
+        release_date = _ts_to_date(pubtime) if pubtime else (album_info.get('time_public') or song.get('time_public') or None)
+        out.append({
+            'song_name': song.get('title', '') or song.get('name', ''),
+            'performer': singers,
+            'platform': 'QQ音乐',
+            'platform_code': 'qq',
+            'availability': availability,
+            'song_url': f'https://y.qq.com/n/ryqq/songDetail/{songmid}',
+            'album': album_info.get('name', ''),
+            'release_date': release_date,
+            'lyricist': None,
+            'composer': None,
+            'collection_count': None,
+            'listening_count': None,
+            'comment_count': None,
+            'share_count': None,
+            'record_label': None,
+            '_songmid': songmid,
+            '_songid': song.get('id', 0),
+            '_albummid': album_info.get('mid', ''),
+            '_from_dosearch': True,
+            'duration': _safe_int(song.get('interval')),
+        })
+    return out
+
+
 def search_qq(keyword, max_results=30, verify_playable=True):
     """QQ音乐搜索（支持多页抓取）。
 
@@ -2663,6 +2740,22 @@ def search_qq(keyword, max_results=30, verify_playable=True):
 
     except Exception as e:
         print(f"[QQ] Error: {e}")
+
+    # v4.30.39：补充新版 DoSearch，修复 client_search_cp 对低热度曲目漏检
+    # （例：「拜托 / 麦手」在 client_search_cp 前 30 条不出现，DoSearch 能返回）。
+    # 按 songmid 去重合并，优先保留旧版顺序，DoSearch 结果补在后面。
+    if len(results) < max_results:
+        try:
+            v2 = _search_qq_v2(keyword, max_results)
+            seen = {r['_songmid'] for r in results if r.get('_songmid')}
+            for r in v2:
+                if r.get('_songmid') and r['_songmid'] not in seen:
+                    seen.add(r['_songmid'])
+                    results.append(r)
+                    if len(results) >= max_results:
+                        break
+        except Exception as e:
+            print(f'[QQ] DoSearch supplement error: {e}')
 
     if not results:
         # 正式搜索被风控（query error / subcode -10003）→ 走联想接口兜底
