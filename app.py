@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.39'
+APP_VERSION        = '4.30.46'
 _BUILD_STAMP        = '20260824.05'  # v4.28.0：匹配器根因修复（歌词演唱者解析 _parse_lyric_performer + 脏数据bug修复 + 批量 _enrich_result 兜底）。 // v4.27.34：搜索真实进度。① 新增内存进度注册表 SEARCH_PROGRESS + 打点函数（_sp_start/_sp_platform_done/_sp_stage/_sp_finish），search_all 每个「平台×关键词」任务完成即累加条数（失败也计数，分母不悬空），_search_core 在补全/聚合阶段切 stage。② 新增 GET /api/search_progress?sid=，返回 stage/total/各平台条数/任务完成数/耗时。③ 前端生成 search_id 随 POST 发出，复用原 1 秒定时器轮询进度，横幅副标题实时显示「已抓到 N 条（QQ x · 酷狗 y）· 正在抓取剩余平台/补全详情/聚合」，取代原来只有「已等待 N 秒」的黑盒。④ 修既有假死 bug：软超时(150s)后 fetch 返回时旧代码 `if (timedOut) return` 吞掉结果，横幅一直转、搜索按钮永久 disabled；现在超时只弹 toast，结果照常渲染、UI 正常收尾。 // 上版 v4.27.33：提高每平台搜索上限并让大数量真正有用。① fetch_limit 去掉打折/地板，用户选 100/500 如实抓取（输入上界由 api_search min(limit,1000) 兜底）。② 详情补全不再硬编码 results[:30]，改为 results[:SEARCH_ENRICH_CAP=100]：选 100/500 时补齐前 100 条的词曲/发行方/收藏量，长尾保留搜索接口基础字段；补全耗时框死在 100 条内。③ 单平台 future 超时 70s→120s（500 大数量最慢单平台任务逼近 90s，放宽避免截断丢结果）；前端软超时 120s→150s + 文案改为「每平台大数量搜索并补全详情中」。
-APP_VERSION_NAME   = 'v4.30.39 QQ搜索补充新版 DoSearch：修复 client_search_cp 对低热度歌（如「拜托/麦手」）漏检导致误判"未收录"的问题'
+APP_VERSION_NAME   = 'v4.30.46 链接直查：支持酷狗新版分享页 mixsong/tme_operations/xxx.html#xxx（页面SSR抠主歌hash）；QQ搜索v4.30.45主搜回退sticky+DoSearch新连接双源互补+同词重试+限流安全网'
 APP_VERSION_DATE   = '2026-09-24'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -2600,6 +2600,40 @@ def _search_qq_smartbox(keyword, max_results=10):
     return out
 
 
+def _qq_http_get(url, params=None, headers=None, timeout=12, retries=4, base_sleep=0.5):
+    """QQ 域名专属 HTTP GET。
+
+    关键：每次新建 Session + ``Connection: close``，打破 CloudBase 按连接绑定的
+    NAT 出口 IP——urllib3 默认连接池复用同一 host 连接，导致重试/并发恒走同一个
+    被风控的出口 IP（表现为「块状交替」失败：连成几发几败）。新连接迫使云重新
+    选出口，重试才有机会落到未被风控的正常 IP；指数退避（0.5/1/2/4s）应对短时限流窗口。
+
+    search_qq 的主搜（client_search_cp）与补充源（DoSearch）都走本函数，两端都
+    获得同样的出口 IP 重选能力，互补兜底。
+    """
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            s = requests.Session()
+            h = dict(headers or {})
+            h['Connection'] = 'close'
+            resp = s.get(url, params=params, headers=h, timeout=timeout)
+            s.close()
+            return resp
+        except Exception as e:
+            last_exc = e
+        if attempt < retries - 1:
+            time.sleep(base_sleep * (2 ** attempt))
+    print(f'[QQ] http_get 失败(已重试{retries}次): {last_exc}')
+    return None
+
+
+# 全局串行化 DoSearch：search_all 并发多关键词时，每个关键词的 search_qq 都会触发
+# DoSearch，并发打到 u.y.qq.com 会触发云出口 IP 的 rate limit（表现为间歇 500/超时，
+# 低热度歌偶发漏检）。用全局锁保证同一时刻仅一个 DoSearch 在飞，规避并发限流。
+_DOSEARCH_LOCK = threading.Lock()
+
+
 def _search_qq_v2(keyword, max_results=30):
     """QQ 音乐新版搜索（musicu.fcg DoSearchForQQMusicDesktop）。
 
@@ -2608,7 +2642,10 @@ def _search_qq_v2(keyword, max_results=30):
     且结果自带 action.switch 在线播放开关，可直接判定真实可播状态。
     本函数作为 search_qq 的补充来源，与旧版结果按 songmid 去重合并。
     """
-    try:
+    song_list = []
+    # 串行锁 + 每次新连接（见 _qq_http_get 注释）：规避并发限流并打破出口 IP 绑定。
+    # _qq_http_get 内部已做 4 次指数退避重试，这里不再外层重试。
+    with _DOSEARCH_LOCK:
         payload = {
             'req_0': {
                 'module': 'music.search.SearchCgiService',
@@ -2621,17 +2658,22 @@ def _search_qq_v2(keyword, max_results=30):
                 }
             }
         }
-        resp = requests.get(
+        resp = _qq_http_get(
             'https://u.y.qq.com/cgi-bin/musicu.fcg',
             params={'format': 'json', 'data': json.dumps(payload, ensure_ascii=False)},
             headers={'User-Agent': COMMON_UA, 'Referer': 'https://y.qq.com/'},
-            timeout=15)
-        data = resp.json()
-        song_list = (data.get('req_0', {}).get('data', {}).get('body', {}).get('song', {}).get('list', [])) or []
-        if not song_list:
+            timeout=12)
+        if resp is None:
+            print('[QQ] DoSearch 网络重试耗尽')
             return []
-    except Exception as e:
-        print(f'[QQ] DoSearch error: {e}')
+        try:
+            data = resp.json()
+        except Exception as e:
+            print(f'[QQ] DoSearch 解析失败: {e}')
+            return []
+        song_list = (data.get('req_0', {}).get('data', {}).get('body', {}).get('song', {}).get('list', [])) or []
+    if not song_list:
+        print('[QQ] DoSearch 返回空列表')
         return []
 
     out = []
@@ -2677,17 +2719,16 @@ def _search_qq_v2(keyword, max_results=30):
     return out
 
 
-def search_qq(keyword, max_results=30, verify_playable=True):
-    """QQ音乐搜索（支持多页抓取）。
+def _search_qq_once(keyword, max_results, cookie_str):
+    """单次 QQ 搜索：主搜 client_search_cp（sticky 连接池）+ DoSearch 补充，按 songmid 去重合并。
 
-    正式搜索被风控打空时自动降级到 _search_qq_smartbox（见该函数注释）。
-    verify_playable=True（交互式）：对头部候选补查 bit12 播放开关，让"在架"=实际可播；
-    False（批量路径）：只纠"已下架"误杀，不反向翻，省请求。
+    返回合并后的结果列表；若两端都明显被限流（主搜 <10 条且 DoSearch 贡献为 0），
+    返回 None（由 search_qq 退避重试或交上层重试），避免把「看着有结果、其实被限流」
+    的脏数据当真，导致匹配器误判「平台没有这首歌」。
     """
     results = []
     page_size = 30
     max_pages = (max_results + page_size - 1) // page_size
-    cookie_str = get_cookie_string('qq')
     try:
         for page in range(1, max_pages + 1):
             if len(results) >= max_results:
@@ -2704,6 +2745,8 @@ def search_qq(keyword, max_results=30, verify_playable=True):
             }
             if cookie_str:
                 headers['Cookie'] = cookie_str
+            # 主搜保留连接池（keep-alive，sticky）：sticky 连接一旦落到好 IP 就稳定可播，
+            # 与 DoSearch 的每次新连接形成「双源异策略」互补，比两端都强制新连接更稳。
             resp = requests.get(url, params=params, headers=headers, timeout=10)
             data = resp.json()
             song_list = data.get('data', {}).get('song', {}).get('list', [])
@@ -2722,40 +2765,65 @@ def search_qq(keyword, max_results=30, verify_playable=True):
                     'availability': _qq_availability(song),
                     'song_url': f'https://y.qq.com/n/ryqq/songDetail/{songmid}',
                     'album': song.get('albumname', ''),
-                    'release_date': _ts_to_date(song.get('pubtime')),  # 搜索结果自带 pubtime（秒级时间戳）
-                    'lyricist': None,
-                    'composer': None,
-                    'collection_count': None,
-                    'listening_count': None,
-                    'comment_count': None,
-                    'share_count': None,
-                    'record_label': None,
+                    'release_date': _ts_to_date(song.get('pubtime')),
+                    'lyricist': None, 'composer': None,
+                    'collection_count': None, 'listening_count': None,
+                    'comment_count': None, 'share_count': None, 'record_label': None,
                     '_songmid': songmid,
                     '_songid': song.get('songid', 0),
                     '_albummid': song.get('albummid', ''),
-                    # v4.25.12：时长维度（秒）。QQ 搜索返回自带 interval，归一成 duration
-                    # 供匹配器「片段救援」使用（官方只发 30s 试听片段、完整版在民间重传的场景）。
                     'duration': _safe_int(song.get('interval')),
                 })
-
     except Exception as e:
         print(f"[QQ] Error: {e}")
 
-    # v4.30.39：补充新版 DoSearch，修复 client_search_cp 对低热度曲目漏检
-    # （例：「拜托 / 麦手」在 client_search_cp 前 30 条不出现，DoSearch 能返回）。
-    # 按 songmid 去重合并，优先保留旧版顺序，DoSearch 结果补在后面。
-    if len(results) < max_results:
-        try:
-            v2 = _search_qq_v2(keyword, max_results)
-            seen = {r['_songmid'] for r in results if r.get('_songmid')}
-            for r in v2:
-                if r.get('_songmid') and r['_songmid'] not in seen:
-                    seen.add(r['_songmid'])
-                    results.append(r)
-                    if len(results) >= max_results:
-                        break
-        except Exception as e:
-            print(f'[QQ] DoSearch supplement error: {e}')
+    # DoSearch（u.y.qq.com）作为可靠主源，无条件补充（见 _search_qq_v2 注释）。
+    n_primary = len(results)
+    try:
+        v2 = _search_qq_v2(keyword, max_results)
+        seen = {r['_songmid'] for r in results if r.get('_songmid')}
+        dosearch_count = 0
+        for r in v2:
+            if r.get('_songmid') and r['_songmid'] not in seen:
+                seen.add(r['_songmid'])
+                results.append(r)
+                dosearch_count += 1
+    except Exception as e:
+        dosearch_count = 0
+        print(f'[QQ] DoSearch supplement error: {e}')
+
+    # 限流安全网：两端都明显被限流 → 返回 None（上层重试），而非假阴性。
+    if dosearch_count == 0 and n_primary < 10:
+        return None
+    return results
+
+
+def search_qq(keyword, max_results=30, verify_playable=True):
+    """QQ音乐搜索（支持多页抓取）。
+
+    正式搜索被风控打空时自动降级到 _search_qq_smartbox（见该函数注释）。
+    verify_playable=True（交互式）：对头部候选补查 bit12 播放开关，让"在架"=实际可播；
+    False（批量路径）：只纠"已下架"误杀，不反向翻，省请求。
+    """
+    cookie_str = get_cookie_string('qq')
+    # v4.30.45：云端 QQ 出口按时间窗限流，单次主搜+DoSearch 可能都被限流（块状失败）。
+    # 同一关键词重试（不换词）并退避 3s/6s，等限流窗口过去才能稳定命中低热度歌（麦手等）；
+    # 仍全超时则交上层（匹配器标 search_failed 稍后重试），绝不返回假阴性「平台没有」。
+    results = None
+    for attempt in range(3):
+        once = _search_qq_once(keyword, max_results, cookie_str)
+        if once is not None:
+            results = once
+            break
+        if attempt < 2:
+            time.sleep(3 * (2 ** attempt))
+    if results is None:
+        print(f'[QQ] 关键词「{keyword}」连续3次疑似限流，返回None交上层重试')
+        return None
+
+    # v4.30.40：清洗搜索结果——client_search_cp 云端偶发返回空壳 item（song_name/_songmid 缺失），
+    # 不过滤会污染结果流并展示为「None | None | None」。仅保留歌名与 songmid 都合法的完整结果。
+    results = [r for r in results if r.get('song_name') and r.get('_songmid')]
 
     if not results:
         # 正式搜索被风控（query error / subcode -10003）→ 走联想接口兜底
@@ -10064,11 +10132,13 @@ def _parse_song_url(url):
         return None
     # 跟随重定向拿最终 URL（处理短链，如 c6.y.qq.com/base/fcgi-bin/u?__=XXX）
     final = raw
+    body = None
     try:
         resp = requests.get(raw, headers={'User-Agent': COMMON_UA, 'Referer': 'https://y.qq.com/'},
                             allow_redirects=True, timeout=15)
         if resp.url:
             final = resp.url
+        body = resp.text   # v4.30.46：保留页面内容，酷狗新版分享页要从 SSR 里抠 hash
     except Exception:
         pass
 
@@ -10086,11 +10156,19 @@ def _parse_song_url(url):
             return {'platform_code': 'qq', 'songid': songid, 'songmid': songmid,
                     'song_url': 'https://y.qq.com/n/ryqq/songDetail/%s' % (songmid or songid)}
     # 酷狗
-    if 'kugou.com' in final:
+    if 'kugou.com' in final or 'kugou.com' in raw:
         m = re.search(r'hash=([0-9A-Fa-f]{32})', final)
         if m:
             return {'platform_code': 'kugou', 'hash': m.group(1),
                     'song_url': 'https://www.kugou.com/song/#hash=%s' % m.group(1)}
+        # v4.30.46：新版分享页 https://www.kugou.com/mixsong/tme_operations/xxx.html#xxx
+        # 不带 hash 参数，但页面 SSR 内嵌当前歌曲信息——第一个 32 位 hash 即主歌
+        # （实测 tme_operations 页 hash 出现在 song_info 区块，反查 getSongInfo.php 一致）。
+        if body:
+            m2 = re.search(r'hash["\'\s:=]+["\']?([0-9A-Fa-f]{32})', body)
+            if m2:
+                return {'platform_code': 'kugou', 'hash': m2.group(1),
+                        'song_url': 'https://www.kugou.com/song/#hash=%s' % m2.group(1)}
     # 酷我
     if 'kuwo.cn' in final:
         m = re.search(r'play_detail/(\d+)', final) or re.search(r'rid=(\d+)', final)
