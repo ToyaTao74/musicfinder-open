@@ -558,7 +558,8 @@ async function loadArchive(page) {
     archivePage = page || 1;
     const q = new URLSearchParams({
         page: archivePage, size: archiveSize, q: $('monArchiveQ').value.trim(),
-        lock: ($('monArchiveLock') || {}).value || ''
+        lock: ($('monArchiveLock') || {}).value || '',
+        sort: ($('monArchiveSort') || {}).value || ''
     });
     let d;
     try { d = await api('/archive/list?' + q); } catch (e) { return; }
@@ -568,7 +569,7 @@ async function loadArchive(page) {
     d.items.forEach(r => archiveCache[r.id] = r);
 
     if (!d.items.length) {
-        tb.innerHTML = '<tr><td colspan="10" class="mon-empty-cell">暂无数据 —— 先导入曲库，或点「＋ 新增歌曲」</td></tr>';
+        tb.innerHTML = '<tr><td colspan="11" class="mon-empty-cell">暂无数据 —— 先导入曲库，或点「＋ 新增歌曲」</td></tr>';
         $('monArchivePager').hidden = true;
         return;
     }
@@ -608,6 +609,7 @@ async function loadArchive(page) {
             <td>${esc(r.song_name)}</td>
             <td>${esc(r.artist || '—')}</td>
             <td>${esc(wj || '—')}</td>
+            <td class="mon-import-time">${fmtArchiveDate(r.created_at)}</td>
             ${platCell('qq')}${platCell('kugou')}${platCell('netease')}
             <td><label class="mon-switch">
                 <input type="checkbox" class="mon-arch-toggle" data-id="${r.id}" ${r.enabled ? 'checked' : ''}>
@@ -615,6 +617,7 @@ async function loadArchive(page) {
             <td class="mon-row-acts">
                 <button class="mon-row-btn" data-act="edit" data-id="${r.id}" title="编辑信息">✏️</button>
                 <button class="mon-row-btn" data-act="hist" data-id="${r.id}" title="看历史走势">📈</button>
+                <button class="mon-row-btn mon-link-btn" data-act="linklock" data-id="${r.id}" title="粘贴平台链接，手动锁定为正版">🔗</button>
                 <button class="mon-row-btn mon-danger" data-act="del" data-id="${r.id}" title="从名单移除">🗑</button>
             </td>
         </tr>`;
@@ -648,6 +651,7 @@ async function onArchTableClick(e) {
     const act = btn.dataset.act;
     if (act === 'edit') return openEditSong(aid);
     if (act === 'hist') return openHist(aid);
+    if (act === 'linklock') return openLinkLock(aid);
     if (act === 'del') return askDelete({ archive_ids: [aid] }, `确认把《${esc((archiveCache[aid] || {}).song_name || '这首歌')}》从名单移除？`);
     if (act === 'unlock') {
         try {
@@ -670,6 +674,12 @@ async function onArchTableClick(e) {
 // 'filtered'   → 一次性锁定「按当前筛选条件匹配」的全部（如 2277 条中所有 "待确认"）
 let archSelectScope = null;
 let archSelectFilteredCount = 0;  // scope='filtered' 时后端返回的总数
+let archSelectAllMode = false;    // true = 全选所有监控歌曲（忽略筛选条件）
+
+function fmtArchiveDate(s) {
+    if (!s) return '—';
+    return String(s).slice(0, 16).replace('T', ' ');
+}
 
 function _archLockFilter() {
     // 把当前 archive 列表筛选条件打包发给后端
@@ -694,9 +704,12 @@ function syncArchBatch() {
     const label = $('monArchCheckAllLabel');
     if (label) {
         label.textContent = archSelectScope === 'filtered'
-            ? '☑ 取消所有匹配项'
+            ? (archSelectAllMode ? '☑ 取消全选所有监控歌曲' : '☑ 取消所有匹配项')
             : (allChecked ? '☐ 取消全选当前页' : '☑ 全选当前页');
     }
+    const allBtn = $('monArchSelectAll');
+    if (allBtn) allBtn.textContent = archSelectAllMode
+        ? '取消全选所有监控歌曲' : `全选所有监控歌曲${archiveTotal ? ` (${archiveTotal.toLocaleString()})` : ''}`;
     // "全选匹配筛选项"按钮的可见性：只在从未勾过（避免视觉拥挤）
     const selBtn = $('monArchSelectFiltered');
     if (selBtn) {
@@ -714,6 +727,7 @@ function syncArchBatch() {
 function toggleArchAll() {
     const checks = document.querySelectorAll('.mon-arch-check');
     if (!checks.length) { return; }
+    archSelectAllMode = false;  // 当前页选择 ≠ 全选所有
     const checked = document.querySelectorAll('.mon-arch-check:checked');
     const allChecked = checks.length > 0 && checked.length === checks.length;
     if (allChecked) {
@@ -731,6 +745,7 @@ function toggleArchAll() {
 // v4.27.11：点 "全选匹配筛选 N 条" → 一次性勾「所有页、所有匹配当前 lock/q 的存档」
 async function selectArchFiltered() {
     if (archiveTotal <= 0) { toast('当前筛选下没有可勾选条目', 'err'); return; }
+    archSelectAllMode = false;  // 这是筛选范围内的全选，非全库
     const filt = _archLockFilter();
     const msg = archiveTotal > 50
         ? `确定一次性锁定所有 ${archiveTotal.toLocaleString()} 条（当前筛选条件下）吗？\n提示：操作会立即执行，无法撤回。`
@@ -746,12 +761,34 @@ async function selectArchFiltered() {
     return archiveTotal;
 }
 
+// 新增：一键全选「所有监控歌曲」（忽略筛选条件，跨所有页）
+async function selectArchAll() {
+    if (archiveTotal <= 0) { toast('暂无可勾选歌曲', 'err'); return; }
+    if (archSelectAllMode) {
+        // 再次点击 = 取消全选所有
+        archSelectAllMode = false;
+        archSelectScope = null;
+        archSelectFilteredCount = 0;
+        document.querySelectorAll('.mon-arch-check').forEach(c => { c.checked = false; });
+        syncArchBatch();
+        toast('已取消全选所有监控歌曲', 'ok', 2200);
+        return;
+    }
+    if (!confirm(`确定一键全选所有 ${archiveTotal.toLocaleString()} 首监控歌曲吗？\n（将忽略当前筛选条件，用于批量操作；操作会立即执行，无法撤回）`)) return;
+    archSelectAllMode = true;
+    archSelectScope = 'filtered';
+    archSelectFilteredCount = archiveTotal;
+    document.querySelectorAll('.mon-arch-check').forEach(c => { c.checked = true; });
+    syncArchBatch();
+    toast(`已全选所有 ${archiveTotal.toLocaleString()} 首监控歌曲（跨所有页）`, 'ok', 6000);
+}
+
 async function archBatch(action) {
     let payload;
     let scopeLabel = '';
     if (archSelectScope === 'filtered') {
-        // 跨页全选：把筛选条件原样发给后端
-        payload = { action, select_all: true, lock_filter: _archLockFilter() };
+        // 跨页全选：全选所有模式忽略筛选条件（整库），否则用当前筛选
+        payload = { action, select_all: true, lock_filter: archSelectAllMode ? {} : _archLockFilter() };
         scopeLabel = `跨页 ${archSelectFilteredCount.toLocaleString()} 条`;
     } else {
         const ids = [...document.querySelectorAll('.mon-arch-check:checked')].map(c => +c.value);
@@ -768,6 +805,7 @@ async function archBatch(action) {
         const d = await apiJson('/archive/batch_lock', payload);
         toast(`已处理 ${d.affected} 首（${d.scope || '常规'}）`, 'ok');
         if (archSelectScope === 'filtered') archSelectScope = null;  // 一次操作完回到 null
+        archSelectAllMode = false;
         loadArchive(archivePage); loadStats();
     } catch (e) { toast(e.message, 'err'); }
 }
@@ -921,11 +959,11 @@ function renderReport(d) {
     }
 
     // 榜单上榜
-    renderChartHits(d.chart_hits_recent || [], d.chart_hits_by_chart || [], d.last_chart_run || null);
+    renderChartHits(d.chart_hits_songs || [], d.chart_hits_by_chart || [], d.last_chart_run || null);
 }
 
 // ── 榜单上榜渲染 ──────────────────────────────────────
-function renderChartHits(recent, byChart, lastRun) {
+function renderChartHits(songs, byChart, lastRun) {
     // 榜单来源清单（透明展示「抓的是什么榜」+ 实际抓取是否成功）
     const m = (lastRun && lastRun.message) || '';
     const qqN = parseInt((m.match(/qq=(\d+)/) || [])[1] || '0', 10);
@@ -944,7 +982,7 @@ function renderChartHits(recent, byChart, lastRun) {
     }
 
     const empty = $('repChartEmpty'), content = $('repChartContent');
-    if (!recent.length && !byChart.length) {
+    if (!songs.length && !byChart.length) {
         empty.hidden = false; content.hidden = true;
         if (lastRun && /hits=0/.test(lastRun.message || '')) {
             empty.innerHTML = `已抓取过榜单（${esc(lastRun.finished_at || '')}）。<b>你监控的歌今天没有冲进这些榜</b>`
@@ -959,28 +997,80 @@ function renderChartHits(recent, byChart, lastRun) {
         return;
     }
     empty.hidden = true; content.hidden = false;
+
+    // 平台显示名（本地兜底，避免依赖全局常量缺失）
+    const PF_NAMES = { qq: 'QQ音乐', kugou: '酷狗音乐', netease: '网易云' };
+    const PLAT_ORDER = ['qq', 'kugou', 'netease'];
+    const PREFIXES = ['QQ音乐', '酷狗音乐', '酷狗', '网易云'];
+    const chartLabel = (platform, name) => {
+        let lbl = (name || '').trim()
+            || ((PF_NAMES[platform] || platform) + '榜单');
+        for (const pf of PREFIXES) {
+            if (lbl.indexOf(pf) === 0) { lbl = lbl.slice(pf.length); break; }
+        }
+        return lbl || ((PF_NAMES[platform] || platform) + '榜');
+    };
+    // 综合热度：名次越靠前分值越高（rank 1→499，rank 500→0）+ 每次上榜 +30 权重
+    const heatOf = (x) => (x.heat_score != null) ? x.heat_score
+        : ((x.cnt || 0) * 30 + Math.max(0, 500 - Math.min(x.best_rank || 500, 500)));
+    const lockTag = (x) => x.platform_locked ? '' :
+        ' <span class="rep-chart-nolock" title="曲库在该平台未锁定原版——榜单这条可能是翻唱/下架/歌手错标，并非真正原版上榜">⚠ 平台无原版</span>';
+
     const hits = $('repChartHits');
-    if (!recent.length) {
+    if (!songs.length) {
         hits.innerHTML = '<div class="mon-empty">期间内暂无监控歌曲上榜</div>';
     } else {
-        hits.innerHTML = recent.map(x => {
-            const delta = (x.prev_rank == null) ? ''
-                : (x.prev_rank > x.rank
-                    ? `<span class="delta up">▲ ${x.prev_rank - x.rank}</span>`
-                    : (x.prev_rank < x.rank
-                        ? `<span class="delta down">▼ ${x.rank - x.prev_rank}</span>`
-                        : '<span class="delta">—</span>'));
-            const platform = x.platform || '—';
-            return `<div class="rep-chart-row">
-                <div class="rep-chart-date">${esc(x.stat_date || '')}</div>
-                <div>
-                    <div class="rep-chart-title">${esc(x.song_name || '')}</div>
-                    <div class="rep-chart-artist">${esc(x.artist || '—')} · ${esc(x.chart_name || '')}${x.platform_locked ? '' : ' <span class="rep-chart-nolock" title="曲库在该平台未锁定原版——榜单这条可能是翻唱/下架/歌手错标，并非真正原版上榜">⚠ 平台无原版</span>'}</div>
-                </div>
-                <div class="rep-chart-platform ${platform}">${esc(platform)}</div>
-                <div class="rep-chart-rank">#${x.rank}${delta}</div>
-            </div>`;
-        }).join('');
+        // 按「平台 + 具体榜单」二级分组
+        const groups = {};
+        songs.forEach(x => {
+            const key = (x.platform || '?') + '||' + (x.chart_id || '?');
+            const g = groups[key] || (groups[key] = {
+                platform: x.platform, chart_id: x.chart_id,
+                chart_name: x.chart_name, items: []
+            });
+            g.items.push(x);
+        });
+        const keys = Object.keys(groups).sort((a, b) => {
+            const ga = groups[a], gb = groups[b];
+            const ia = PLAT_ORDER.indexOf(ga.platform);
+            const ib = PLAT_ORDER.indexOf(gb.platform);
+            if (ia !== ib) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+            const ha = ga.items.reduce((s, x) => s + heatOf(x), 0);
+            const hb = gb.items.reduce((s, x) => s + heatOf(x), 0);
+            return hb - ha;  // 同平台内按分组总热度倒序
+        });
+        let html = '';
+        keys.forEach(k => {
+            const g = groups[k];
+            g.items.sort((a, b) => heatOf(b) - heatOf(a));  // 组内按综合热度倒序
+            const pname = PF_NAMES[g.platform] || g.platform;
+            const label = chartLabel(g.platform, g.chart_name);
+            html += `<div class="rep-chart-group">
+                <div class="rep-chart-group-h">【${esc(pname)} - ${esc(label)}】 · 上榜 ${g.items.length} 首</div>
+                <div class="rep-chart-grid">
+                    <div class="rep-chart-grid-h"><span>歌曲</span><span class="ta-c">上榜次数</span><span class="ta-r">综合热度排序</span></div>`;
+            html += g.items.map(x => {
+                const platform = x.platform || '—';
+                const latest = (x.latest_rank != null) ? x.latest_rank : x.best_rank;
+                const best = x.best_rank;
+                const cnt = x.cnt || 0;
+                return `<div class="rep-chart-row3">
+                    <div class="rep-chart-c1">
+                        <div class="rep-chart-title">${esc(x.song_name || '')}</div>
+                        <div class="rep-chart-artist">${esc(x.artist || '—')} · <span class="rep-chart-platform ${platform}">${esc(platform)}</span>${lockTag(x)}</div>
+                    </div>
+                    <div class="rep-chart-c2">
+                        <span class="rep-chart-cnt">${cnt}<small>次</small></span>
+                    </div>
+                    <div class="rep-chart-c3">
+                        <span class="rep-chart-rank">#${latest}</span>
+                        <span class="rep-chart-best">最佳 #${best}</span>
+                    </div>
+                </div>`;
+            }).join('');
+            html += `</div></div>`;
+        });
+        hits.innerHTML = html;
     }
     const bc = $('repChartByChart');
     if (!byChart.length) {
@@ -1048,6 +1138,55 @@ function openEditSong(aid) {
 }
 
 function closeSong() { $('monSongOverlay').hidden = true; }
+
+// ── 粘贴链接锁定为正版（v4.30.49）────────────────
+let _linkAid = null;
+
+function detectPlatformHint(url) {
+    const u = (url || '').toLowerCase();
+    if (u.includes('music.163.com') || u.includes('163.com')) return '网易云音乐';
+    if (u.includes('kugou.com')) return '酷狗音乐';
+    if (u.includes('qq.com')) return 'QQ音乐';
+    return null;
+}
+
+function openLinkLock(aid) {
+    _linkAid = aid;
+    const r = archiveCache[aid] || {};
+    $('monLinkTarget').textContent = `${r.song_name || '—'}${r.artist ? ' — ' + r.artist : ''}`;
+    $('monLinkUrl').value = '';
+    $('monLinkDetect').hidden = true;
+    $('monLinkWarn').hidden = true;
+    $('monLinkOverlay').hidden = false;
+    setTimeout(() => $('monLinkUrl').focus(), 30);
+}
+
+function closeLinkLock() { $('monLinkOverlay').hidden = true; _linkAid = null; }
+
+async function submitLinkLock() {
+    const url = $('monLinkUrl').value.trim();
+    if (!url) { showLinkWarn('请先粘贴歌曲链接'); return; }
+    const btn = $('monLinkSave');
+    btn.disabled = true; btn.textContent = '锁定中…';
+    try {
+        const d = await apiJson('/platform/lock_url', { archive_id: _linkAid, url });
+        const pname = (d && d.platform_name) || '该平台';
+        let msg = `已锁定到 ${pname} ✅ 正版`;
+        if (d && d.warn) msg += `（提醒：${d.warn}）`;
+        toast(msg, 'ok');
+        closeLinkLock();
+        loadArchive(archivePage);
+    } catch (e) {
+        showLinkWarn(e.message || '锁定失败');
+    } finally {
+        btn.disabled = false; btn.textContent = '锁定为正版';
+    }
+}
+
+function showLinkWarn(t) {
+    const w = $('monLinkWarn');
+    w.textContent = t; w.hidden = false;
+}
 
 async function saveSong() {
     const payload = {
@@ -1135,6 +1274,7 @@ async function confirmDelete() {
         if (archSelectScope === 'filtered') {
             archSelectScope = null;
             archSelectFilteredCount = 0;
+            archSelectAllMode = false;
         }
         loadArchive(archivePage); loadStats();
     } catch (e) {
@@ -1481,14 +1621,16 @@ function bindOnce() {
     })();
     $('monArchCheckAll').addEventListener('change', toggleArchAll);
     $('monArchSelectFiltered').addEventListener('click', selectArchFiltered);
+    $('monArchSelectAll').addEventListener('click', selectArchAll);
     $('monBatchLock').addEventListener('click', () => archBatch('lock'));
     $('monBatchPause').addEventListener('click', () => archBatch('pause'));
     $('monBatchResume').addEventListener('click', () => archBatch('resume'));
 
     // 筛选条件变化 → 清掉跨页全选 scope（避免基于旧筛选条件误操作）
-    const _resetScope = () => { archSelectScope = null; };
+    const _resetScope = () => { archSelectScope = null; archSelectAllMode = false; };
     $('monArchiveQ').addEventListener('input', _resetScope);
     $('monArchiveLock').addEventListener('change', _resetScope);
+    $('monArchiveSort').addEventListener('change', () => { archSelectScope = null; archSelectAllMode = false; loadArchive(1); });
 
     // ── 名单管理（v4.25.20）：增删改 / 平台解锁重搜 / 导出 / 历史 ──
     $('monArchiveTable').addEventListener('click', onArchTableClick);
@@ -1504,8 +1646,9 @@ function bindOnce() {
         if (archSelectScope === 'filtered') {
             const n = archSelectFilteredCount || archiveTotal || 0;
             if (!n) { toast('当前筛选下没有可勾选条目', 'err'); return; }
-            askDelete({ select_all: true, lock_filter: _archLockFilter() },
-                      `确认把当前筛选条件下的全部 ${n.toLocaleString()} 首歌从名单移除？`);
+            const filt = archSelectAllMode ? {} : _archLockFilter();
+            askDelete({ select_all: true, lock_filter: filt },
+                      `确认把${archSelectAllMode ? '全部' : '当前筛选条件下的'} ${n.toLocaleString()} 首歌从名单移除？`);
             return;
         }
         const ids = [...document.querySelectorAll('.mon-arch-check:checked')].map(c => +c.value);
@@ -1551,9 +1694,26 @@ function bindOnce() {
         b.classList.add('active'); histMetric = b.dataset.metric; loadHist();
     }));
     // 弹窗点遮罩关闭
-    ['monSongOverlay', 'monHistOverlay', 'monDeleteOverlay', 'monMatchOverlay', 'monArtistOverlay'].forEach(id => {
+    ['monSongOverlay', 'monHistOverlay', 'monDeleteOverlay', 'monMatchOverlay', 'monArtistOverlay', 'monLinkOverlay'].forEach(id => {
         const ov = $(id);
         ov.addEventListener('click', e => { if (e.target === ov) ov.hidden = true; });
+    });
+
+    // 粘贴链接锁定弹窗（v4.30.49）
+    $('monLinkCancel').addEventListener('click', closeLinkLock);
+    $('monLinkSave').addEventListener('click', submitLinkLock);
+    $('monLinkUrl').addEventListener('input', () => {
+        const hint = detectPlatformHint($('monLinkUrl').value);
+        const box = $('monLinkDetect');
+        if (hint) {
+            box.textContent = `将锁定到：${hint}`;
+            box.className = 'mon-link-detect ok';
+            box.hidden = false;
+        } else {
+            box.textContent = '还没认出平台（支持 QQ音乐 / 网易云 / 酷狗）';
+            box.className = 'mon-link-detect';
+            box.hidden = false;
+        }
     });
 
     // 报告页周期切换 / 刷新

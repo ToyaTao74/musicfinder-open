@@ -258,6 +258,46 @@ def get_report(period='day', stat_date=None):
     except Exception:
         pass
 
+    # 期间内的命中按「歌 + 平台 + 具体榜单」聚合（分组展示用：
+    # 每个榜单分组下列出上榜的监控歌曲，含上榜次数与综合热度）
+    chart_hits_songs = []
+    try:
+        cs_rows = conn.execute("""
+            SELECT ch.archive_id, ch.platform, ch.chart_id, ch.chart_name,
+                   sa.song_name, sa.artist,
+                   COUNT(*) cnt,
+                   COUNT(DISTINCT ch.stat_date) days,
+                   MIN(ch.rank) best_rank,
+                   MAX(ch.rank) worst_rank,
+                   MAX(ch.stat_date) latest_date,
+                   (SELECT rank FROM chart_hit c2
+                      WHERE c2.archive_id = ch.archive_id AND c2.platform = ch.platform
+                        AND c2.chart_id = ch.chart_id
+                        AND c2.stat_date = (SELECT MAX(stat_date) FROM chart_hit c3
+                                             WHERE c3.archive_id = ch.archive_id
+                                               AND c3.platform = ch.platform
+                                               AND c3.chart_id = ch.chart_id)
+                      LIMIT 1) latest_rank,
+                   CASE WHEN sp.song_id IS NOT NULL AND sp.song_id != ''
+                             AND sp.confidence IN ('high','mid','low')
+                        THEN 1 ELSE 0 END AS platform_locked
+            FROM chart_hit ch
+            JOIN song_archive sa ON sa.id = ch.archive_id
+            LEFT JOIN song_platform sp
+                   ON sp.archive_id = ch.archive_id AND sp.platform = ch.platform
+            WHERE ch.stat_date BETWEEN ? AND ?
+            GROUP BY ch.archive_id, ch.platform, ch.chart_id, ch.chart_name
+            ORDER BY cnt DESC, best_rank ASC
+        """, (start_s, end_s)).fetchall()
+        for r in cs_rows:
+            d = dict(r)
+            # 综合热度：名次越靠前分值越高（rank 1→499，rank 500→0）+ 每次上榜加权
+            rank_score = max(0, 500 - min(d['best_rank'] or 500, 500))
+            d['heat_score'] = round((d['cnt'] or 0) * 30 + rank_score, 1)
+            chart_hits_songs.append(d)
+    except Exception:
+        chart_hits_songs = []
+
     has_growth = len(dates_covered) >= 2
 
     return {
@@ -277,6 +317,7 @@ def get_report(period='day', stat_date=None):
         'chart_hits': chart_hits_total,
         'chart_hits_recent': chart_hits_recent,
         'chart_hits_by_chart': chart_hits_by_chart,
+        'chart_hits_songs': chart_hits_songs,
         'platform_coverage': cov,
         'alerts': alerts,
         'last_chart_run': last_chart_run,

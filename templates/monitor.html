@@ -185,6 +185,8 @@
                     title="一次性选中当前筛选条件下所有页的歌曲（如 2277 首 → 不必一页页勾选）">
                 ☑ 全选匹配筛选项
             </button>
+            <button class="btn-ghost" id="monArchSelectAll" type="button"
+                    title="一键选中全部监控歌曲（跨所有页、忽略筛选条件），用于批量操作">全选所有监控歌曲</button>
             <span class="mon-spacer"></span>
             <button class="btn-primary mon-batch-lock" id="monBatchLock" type="button">✅ 批量锁定为正版</button>
             <button class="btn-ghost" id="monBatchRematch" type="button" title="重新去三平台搜一次这些歌">🔄 重新匹配</button>
@@ -200,10 +202,18 @@
                 <option value="">全部匹配状态</option>
                 <option value="official">✅ 正版</option>
                 <option value="pending">⏳ 待确认</option>
-                <option value="none">❌ 平台无</option>
+                <option value="none">❌ 平台无（三平台都没搜到）</option>
+                <option value="qq_none">🎵 QQ音乐 未匹配</option>
+                <option value="kugou_none">🎵 酷狗 未匹配</option>
+                <option value="netease_none">🎵 网易云 未匹配</option>
             </select>
             <input type="text" id="monArchiveQ" class="mon-input" placeholder="搜歌名 / 歌手 / 词曲作者…">
             <select id="monArchiveSize" class="mon-select" title="每页展示数量（持久化到本机）"></select>
+            <select id="monArchiveSort" class="mon-select" title="排序方式">
+                <option value="">默认：导入时间（新→旧）</option>
+                <option value="created_asc">导入时间（旧→新）</option>
+                <option value="id">按 ID 排序</option>
+            </select>
             <button class="btn-ghost" id="monArchiveReload" type="button">查询</button>
             <span class="mon-spacer"></span>
             <span class="mon-rematch-hint" id="monRematchHint" hidden>🔄 正在重新匹配…</span>
@@ -217,7 +227,7 @@
                     <tr>
                         <th style="width:40px"></th>
                         <th style="width:52px">#</th>
-                        <th>歌曲名</th><th>歌手</th><th>词曲</th>
+                        <th>歌曲名</th><th>歌手</th><th>词曲</th><th style="width:120px">导入时间</th>
                         <th style="width:118px">QQ音乐</th>
                         <th style="width:118px">酷狗</th>
                         <th style="width:118px">网易云</th>
@@ -225,7 +235,7 @@
                         <th style="width:126px">操作</th>
                     </tr>
                 </thead>
-                <tbody><tr><td colspan="10" class="mon-empty-cell">暂无数据</td></tr></tbody>
+                <tbody><tr><td colspan="11" class="mon-empty-cell">暂无数据</td></tr></tbody>
             </table>
         </div>
         <div class="mon-pager" id="monArchivePager" hidden></div>
@@ -316,7 +326,7 @@
             <div class="rep-chart-empty" id="repChartEmpty"></div>
             <div class="rep-chart-content" id="repChartContent" hidden>
                 <div class="rep-chart-section">
-                    <div class="rep-chart-h">最近上榜的监控歌曲</div>
+                    <div class="rep-chart-h">榜单分组（只显示你监控的歌真实上榜的）· 按平台 &amp; 榜单</div>
                     <div class="rep-list" id="repChartHits"></div>
                 </div>
                 <div class="rep-chart-section">
@@ -373,6 +383,31 @@
         <div class="modal-actions">
             <button class="modal-btn" id="monSongCancel" type="button">取消</button>
             <button class="modal-btn primary" id="monSongSave" type="button">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ 粘贴链接锁定为正版弹窗（v4.30.49） ═══ -->
+<div class="modal-overlay" id="monLinkOverlay" hidden>
+    <div class="modal mon-link-modal">
+        <h3 class="modal-title">粘贴链接，锁定为正版</h3>
+        <p class="modal-desc" id="monLinkDesc">把这首歌在某个平台（QQ音乐 / 网易云 / 酷狗）的歌曲链接贴进来，系统自动识别平台并锁定为 ✅正版。</p>
+        <div class="mon-form">
+            <div class="mon-form-row">
+                <span class="mon-form-label">目标歌曲</span>
+                <div class="mon-link-target" id="monLinkTarget">—</div>
+            </div>
+            <label class="mon-form-row">
+                <span class="mon-form-label">平台链接 <i>必填</i></span>
+                <input type="text" class="mon-input" id="monLinkUrl"
+                       placeholder="例：https://y.qq.com/n/ryqq/songDetail/0039MnYb0qxYhV 或 网易云/酷狗分享链接">
+            </label>
+            <div class="mon-link-detect" id="monLinkDetect" hidden></div>
+            <div class="mon-form-warn" id="monLinkWarn" hidden></div>
+        </div>
+        <div class="modal-actions">
+            <button class="modal-btn" id="monLinkCancel" type="button">取消</button>
+            <button class="modal-btn primary" id="monLinkSave" type="button">锁定为正版</button>
         </div>
     </div>
 </div>

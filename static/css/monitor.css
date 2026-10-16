@@ -436,23 +436,64 @@
 .rep-chart-empty { font-size: 13px; color: var(--text-secondary); line-height: 1.7; padding: 14px 6px; }
 .rep-chart-section + .rep-chart-section { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border-soft); }
 .rep-chart-h { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
+
+/* 三竖列紧凑展示：歌曲 | 上榜次数 | 综合热度排序 */
+.rep-chart-grid { display: grid; grid-template-columns: 100%; gap: 4px; }
+.rep-chart-grid-h, .rep-chart-row3 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 132px;
+    gap: 12px; align-items: center;
+}
+/* 平台 + 具体榜单 分组 */
+.rep-chart-group { margin-bottom: 14px; }
+.rep-chart-group:last-child { margin-bottom: 0; }
+.rep-chart-group-h {
+    font-size: 13px; font-weight: 700; color: var(--accent);
+    margin: 2px 0 8px; padding: 6px 10px; border-radius: 8px;
+    background: rgba(99, 102, 241, 0.08);
+    border-left: 3px solid var(--accent);
+}
+.rep-chart-grid-h {
+    font-size: 11px; color: var(--text-secondary); font-weight: 600;
+    letter-spacing: .5px; text-transform: uppercase;
+    padding: 4px 8px 6px; border-bottom: 1px solid var(--border-soft);
+}
+.rep-chart-grid-h .ta-c { text-align: center; }
+.rep-chart-grid-h .ta-r { text-align: right; }
+.rep-chart-row3 {
+    padding: 8px 8px; border-radius: 10px;
+    border: 1px solid transparent;
+}
+.rep-chart-row3:hover { background: rgba(99, 102, 241, 0.05); border-color: var(--border-soft); }
+.rep-chart-c1 { min-width: 0; }
+.rep-chart-c2 { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.rep-chart-c3 { text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
+.rep-chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep-chart-artist { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.rep-chart-rank { font-size: 16px; font-weight: 800; color: var(--accent); font-family: ui-monospace, Menlo, monospace; line-height: 1.1; }
+.rep-chart-best { font-size: 10.5px; color: var(--text-secondary); font-family: ui-monospace, Menlo, monospace; }
+.rep-chart-badge { font-size: 12px; font-weight: 600; color: var(--text-primary); background: rgba(99, 102, 241, 0.1); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.rep-chart-latest { font-size: 11px; color: var(--text-secondary); font-family: ui-monospace, Menlo, monospace; }
+.rep-chart-cnt { font-size: 17px; font-weight: 800; color: var(--text-primary); font-family: ui-monospace, Menlo, monospace; line-height: 1.1; }
+.rep-chart-cnt small { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-left: 1px; }
+
+/* 旧四列明细行（按榜单汇总仍用） */
 .rep-chart-row { display: grid; grid-template-columns: 56px 1fr 90px 70px; gap: 12px; align-items: center; padding: 8px 6px; border-radius: 10px; }
 .rep-chart-row:hover { background: rgba(99, 102, 241, 0.05); }
 .rep-chart-date { font-size: 12px; color: var(--text-secondary); font-family: ui-monospace, Menlo, monospace; }
-.rep-chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.rep-chart-artist { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .rep-chart-nolock { font-size: 11px; color: #dc2626; background: rgba(220, 38, 38, 0.1); padding: 1px 6px; border-radius: 999px; margin-left: 4px; white-space: nowrap; }
-.rep-chart-platform { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(99, 102, 241, 0.1); color: var(--accent); text-align: center; }
+.rep-chart-platform { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(99, 102, 241, 0.1); color: var(--accent); text-align: center; white-space: nowrap; }
 .rep-chart-platform.netease { background: rgba(236, 72, 153, 0.1); color: #db2777; }
-.rep-chart-rank { font-size: 14px; font-weight: 700; color: var(--accent); text-align: right; font-family: ui-monospace, Menlo, monospace; }
+.rep-chart-platform.qq { background: rgba(34, 197, 94, 0.12); color: #16a34a; }
+.rep-chart-platform.kugou { background: rgba(245, 158, 11, 0.14); color: #d97706; }
 .rep-chart-rank .delta { font-size: 11px; color: var(--text-secondary); margin-left: 4px; font-weight: 400; }
 .rep-chart-rank .delta.up { color: #16a34a; }
 .rep-chart-rank .delta.down { color: #dc2626; }
 .rep-chart-row .rep-chart-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 
 @media (max-width: 760px) {
-    .rep-chart-row { grid-template-columns: 50px 1fr 70px; }
-    .rep-chart-date { display: none; }
+    .rep-chart-grid-h, .rep-chart-row3 { grid-template-columns: minmax(0,1fr) 72px 92px; gap: 8px; }
+    .rep-chart-rank { font-size: 14px; }
 }
 
 @media (max-width: 760px) {
@@ -527,6 +568,22 @@
 .mon-form-warn {
     font-size: 12.5px; color: #EF4444; background: rgba(239,68,68,0.10);
     border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 10px 12px; line-height: 1.5;
+}
+
+/* ── 粘贴链接锁定弹窗（v4.30.49）── */
+.mon-link-target {
+    font-size: 14px; font-weight: 700; color: var(--text-primary);
+    background: var(--glass-hover); border: 1px solid var(--glass-border);
+    border-radius: 10px; padding: 10px 12px; line-height: 1.4;
+}
+.mon-link-detect {
+    font-size: 12.5px; color: var(--text-tertiary);
+    background: var(--glass-hover); border: 1px dashed var(--glass-border);
+    border-radius: 10px; padding: 8px 12px; line-height: 1.5;
+}
+.mon-link-detect.ok {
+    color: #10B981; background: rgba(16,185,129,0.10);
+    border-color: rgba(16,185,129,0.35);
 }
 
 /* ── 单首历史曲线弹窗 ── */
