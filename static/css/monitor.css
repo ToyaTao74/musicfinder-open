@@ -504,6 +504,23 @@
 .rep-rec-meta b { color: var(--text-primary); font-weight: 700; }
 .rep-rec-best { color: var(--accent) !important; }
 
+/* 冲榜动态 + 榜单纪录：两列独立卡片并排 */
+.rep-chart-two {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+    gap: 14px; align-items: start;
+    margin-top: 16px;
+}
+.rep-chart-two .rep-chart-section {
+    margin-top: 0; padding-top: 0;
+    border-top: none;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 10px 12px 6px;
+    background: rgba(99, 102, 241, 0.03);
+}
+.rep-chart-two .rep-chart-h { margin-bottom: 6px; }
+
 /* 旧四列明细行（按榜单汇总仍用） */
 .rep-chart-row { display: grid; grid-template-columns: 56px 1fr 90px 70px; gap: 12px; align-items: center; padding: 8px 6px; border-radius: 10px; }
 .rep-chart-row:hover { background: rgba(99, 102, 241, 0.05); }
@@ -520,6 +537,7 @@
 
 @media (max-width: 760px) {
     .rep-chart-groups { grid-template-columns: 1fr; }
+    .rep-chart-two { grid-template-columns: 1fr; }
     .rep-chart-grid-h, .rep-chart-row3 { grid-template-columns: minmax(0,1fr) 50px 76px; gap: 6px; }
     .rep-chart-rank { font-size: 14px; }
 }
