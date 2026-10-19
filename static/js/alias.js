@@ -37,6 +37,7 @@
         .alias-btn-home .plat-dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.85;}
         .alias-tag{display:inline-flex;align-items:center;gap:6px;background:#f4f6ff;border:1px solid #e4e9fb;
           border-radius:999px;padding:3px 6px 3px 12px;margin:3px 4px 3px 0;font-size:12.5px;color:#3b4252;}
+        .alias-date{white-space:nowrap;color:#9ca3af;font-size:12px;font-family:ui-monospace,Menlo,monospace;}
         `;
         document.head.appendChild(st);
     }
@@ -94,18 +95,35 @@
             ).join('') + '</span>';
     }
 
-    /* ── 渲染：已生效白名单 ── */
-    function renderAliases(aliases) {
+    /* ── 渲染：已生效白名单（按添加日期从新到旧排序，v4.30.59）── */
+    function renderAliases(aliases, addedAt) {
         const tb = document.getElementById('aliasListTable');
         if (!tb) return;
-        const bases = Object.keys(aliases || {}).sort();
+        addedAt = addedAt || {};
+        const latestOf = base => {
+            const m = addedAt[base] || {};
+            let mx = '';
+            (aliases[base] || []).forEach(v => { if ((m[v] || '') > mx) mx = m[v]; });
+            return mx;
+        };
+        // 有添加日期的在前、新→旧；无时间戳的旧条目垫底按基名排
+        const bases = Object.keys(aliases || {}).sort((a, b) => {
+            const ta = latestOf(a), tb2 = latestOf(b);
+            if (ta !== tb2) return ta > tb2 ? -1 : 1;
+            return a.localeCompare(b);
+        });
         if (!bases.length) {
             tb.innerHTML = '<tr><td class="alias-empty">暂无配置——系统遇到候选时会提示你确认</td></tr>';
             return;
         }
-        tb.innerHTML = '<tr><th>基名（曲库/常用名）</th><th>变体（平台写法 / 改名后）</th><th>歌手主页</th></tr>' +
+        tb.innerHTML = '<tr><th>基名（曲库/常用名）</th><th>变体（平台写法 / 改名后）</th><th>歌手主页</th><th>添加日期</th></tr>' +
             bases.map(base => {
-                const list = aliases[base] || [];
+                const m = addedAt[base] || {};
+                const list = (aliases[base] || []).slice().sort((x, y) => {
+                    const tx = m[x] || '', ty = m[y] || '';
+                    return tx === ty ? x.localeCompare(y) : (tx > ty ? -1 : 1);
+                });
+                const dt = latestOf(base);
                 return '<tr><td><b>' + escapeHtml(base) + '</b></td><td>' +
                     (list.length
                         ? list.map(a =>
@@ -113,7 +131,8 @@
                             '<button type="button" class="alias-btn alias-btn-del" data-act="del" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(a) + '" title="删除该变体">✕</button></span>'
                           ).join('')
                         : '<span class="alias-empty">（无）</span>') +
-                    '</td><td>' + homeButtons(base) + '</td></tr>';
+                    '</td><td>' + homeButtons(base) + '</td>' +
+                    '<td class="alias-date">' + (dt ? escapeHtml(dt.slice(0, 10)) : '—') + '</td></tr>';
             }).join('');
     }
 
@@ -171,7 +190,7 @@
     }
 
     function renderAll(d) {
-        renderAliases(d.aliases);
+        renderAliases(d.aliases, d.added_at);
         renderSuggestions(d.suggestions);
     }
 

@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.58'
-_BUILD_STAMP        = '20261019.05'  # v4.30.58：复核页「机器拿不准」候选卡按收藏量从高到低排序展示（缺失/null 垫底）；data-idx 保留服务端原始索引，确认接口 choice_index 不会错位。
-APP_VERSION_NAME   = 'v4.30.58 复核页候选卡按收藏量排序'
+APP_VERSION        = '4.30.59'
+_BUILD_STAMP        = '20261019.06'  # v4.30.59：艺名管理「已生效白名单」按添加日期从新到旧排序（组内变体同步按时间倒序），新增「添加日期」列。时间戳存 sidecar 文件 performer_aliases_ts.json（主 JSON 格式不变，匹配/云同步零影响）；旧条目无时间戳垫底显示 —。
+APP_VERSION_NAME   = 'v4.30.59 艺名白名单按添加日期排序'
 APP_VERSION_DATE   = '2026-10-19'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -1414,6 +1414,7 @@ def api_admin_performer_aliases_get():
     _load_performer_aliases()
     _load_alias_suggestions()
     return jsonify({'aliases': _all_performer_aliases(),
+                    'added_at': _load_alias_ts(),
                     'suggestions': list(_performer_alias_sugs.values())})
 
 
@@ -1429,14 +1430,18 @@ def api_admin_performer_aliases_add():
         return jsonify({'error': '基名与变体均必填且不能相同'}), 400
     with _performer_aliases_lock:
         cur = _PERFORMER_ALIASES.setdefault(base, set())
+        is_new = alias not in cur
         cur.add(alias)
         _save_performer_aliases()
+    if is_new:
+        _alias_ts_set(base, alias)  # 新增才记时间；重复添加保留原日期
     # 批准后从待确认队列移除（若来自建议）
     _load_alias_suggestions()
     with _performer_alias_sug_lock:
         _performer_alias_sugs.pop(f"{base}||{alias}", None)
         _save_alias_suggestions()
     return jsonify({'ok': True, 'aliases': _all_performer_aliases(),
+                    'added_at': _load_alias_ts(),
                     'suggestions': list(_performer_alias_sugs.values())})
 
 
@@ -1456,7 +1461,9 @@ def api_admin_performer_aliases_del():
             if not _PERFORMER_ALIASES[base]:
                 del _PERFORMER_ALIASES[base]
         _save_performer_aliases()
+    _alias_ts_drop(base, alias)
     return jsonify({'ok': True, 'aliases': _all_performer_aliases(),
+                    'added_at': _load_alias_ts(),
                     'suggestions': list(_performer_alias_sugs.values())})
 
 
@@ -5901,6 +5908,53 @@ def _save_performer_aliases():
                          daemon=True, name='alias-cloud-push').start()
     except Exception as e:
         print(f'[performer_aliases] save error: {e}')
+
+
+# v4.30.59：别名添加时间 sidecar（{base: {variant: 'YYYY-MM-DD HH:MM'}}）。
+# 主 JSON 保持 base→[变体] 纯字符串格式（匹配逻辑/云端同步零影响）；
+# 时间戳单独存盘，旧条目无时间戳 → 前端排序垫底、日期列显示 —。
+_PERFORMER_ALIASES_TS_FILE = os.path.join(COOKIE_DIR, 'performer_aliases_ts.json')
+
+
+def _load_alias_ts():
+    try:
+        with open(_PERFORMER_ALIASES_TS_FILE, encoding='utf-8') as f:
+            raw = json.load(f)
+        return {k: v for k, v in (raw or {}).items() if isinstance(v, dict)}
+    except Exception:
+        return {}
+
+
+def _save_alias_ts(ts_map):
+    try:
+        tmp = _PERFORMER_ALIASES_TS_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(ts_map, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, _PERFORMER_ALIASES_TS_FILE)
+    except Exception as e:
+        print(f'[performer_aliases_ts] save error: {e}')
+
+
+def _alias_ts_set(base, alias):
+    """记录一条别名的添加时间（sidecar，失败不影响主流程）。"""
+    try:
+        m = _load_alias_ts()
+        m.setdefault(base, {})[alias] = time.strftime('%Y-%m-%d %H:%M')
+        _save_alias_ts(m)
+    except Exception:
+        pass
+
+
+def _alias_ts_drop(base, alias):
+    try:
+        m = _load_alias_ts()
+        if base in m and alias in m[base]:
+            m[base].pop(alias, None)
+            if not m[base]:
+                m.pop(base, None)
+            _save_alias_ts(m)
+    except Exception:
+        pass
 
 
 def _performer_is_alias(perf, res_perf):
