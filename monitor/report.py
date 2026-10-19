@@ -404,6 +404,7 @@ def _empty_report(period, reason='no_metrics'):
         'top_gainers': [], 'top_songs': [], 'genres': [],
         'genres_no_label': 0, 'top_artists': [],
         'chart_hits': 0, 'chart_hits_recent': [], 'chart_hits_by_chart': [],
+        'chart_hits_songs': [], 'chart_moves': [], 'chart_records': [],
         'empty_reason': reason,
     }
 
