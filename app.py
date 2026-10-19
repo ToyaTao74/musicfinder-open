@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.53'
-_BUILD_STAMP        = '20261016.05'  # v4.30.53：运营报告「榜单上榜播报」重构为按平台+具体榜单二级分组。后端 chart_hits_songs 改为按(archive_id,platform,chart_id,chart_name)聚合并新增 heat_score（名次越靠前分值越高+上榜次数加权）；前端按【平台 - 榜单】分组渲染，组内三列=歌曲信息/上榜次数/综合热度排序（按heat倒序）。
-APP_VERSION_NAME   = 'v4.30.53 运营报告榜单播报：按平台+榜单分组，综合热度排序'
-APP_VERSION_DATE   = '2026-10-16'
+APP_VERSION        = '4.30.54'
+_BUILD_STAMP        = '20261019.01'  # v4.30.54：榜单播报分组改为「卡片框」布局——每个榜单分组一个独立卡片（含自身三列表），多卡片横向并排（auto-fill minmax 330px），列距收紧，消除歌名与名次间大片空白。
+APP_VERSION_NAME   = 'v4.30.54 榜单播报：榜单分组卡片化并排展示'
+APP_VERSION_DATE   = '2026-10-19'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session

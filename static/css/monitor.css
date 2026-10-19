@@ -438,20 +438,30 @@
 .rep-chart-h { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
 
 /* 三竖列紧凑展示：歌曲 | 上榜次数 | 综合热度排序 */
-.rep-chart-grid { display: grid; grid-template-columns: 100%; gap: 4px; }
+.rep-chart-grid { display: grid; grid-template-columns: 100%; gap: 2px; }
 .rep-chart-grid-h, .rep-chart-row3 {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 92px 132px;
-    gap: 12px; align-items: center;
+    grid-template-columns: minmax(0, 1fr) 52px 80px;
+    gap: 8px; align-items: center;
 }
-/* 平台 + 具体榜单 分组 */
-.rep-chart-group { margin-bottom: 14px; }
-.rep-chart-group:last-child { margin-bottom: 0; }
+/* 平台 + 具体榜单 分组：每个榜单一个独立卡片框，横向并排 */
+.rep-chart-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 14px; align-items: start;
+}
+.rep-chart-group {
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    padding: 10px 12px 6px;
+    background: rgba(99, 102, 241, 0.03);
+}
 .rep-chart-group-h {
-    font-size: 13px; font-weight: 700; color: var(--accent);
-    margin: 2px 0 8px; padding: 6px 10px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 700; color: var(--accent);
+    margin: 0 0 8px; padding: 5px 8px; border-radius: 8px;
     background: rgba(99, 102, 241, 0.08);
     border-left: 3px solid var(--accent);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rep-chart-grid-h {
     font-size: 11px; color: var(--text-secondary); font-weight: 600;
@@ -492,7 +502,8 @@
 .rep-chart-row .rep-chart-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 
 @media (max-width: 760px) {
-    .rep-chart-grid-h, .rep-chart-row3 { grid-template-columns: minmax(0,1fr) 72px 92px; gap: 8px; }
+    .rep-chart-groups { grid-template-columns: 1fr; }
+    .rep-chart-grid-h, .rep-chart-row3 { grid-template-columns: minmax(0,1fr) 50px 76px; gap: 6px; }
     .rep-chart-rank { font-size: 14px; }
 }
 

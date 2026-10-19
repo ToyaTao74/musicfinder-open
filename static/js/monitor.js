@@ -1039,7 +1039,7 @@ function renderChartHits(songs, byChart, lastRun) {
             const hb = gb.items.reduce((s, x) => s + heatOf(x), 0);
             return hb - ha;  // 同平台内按分组总热度倒序
         });
-        let html = '';
+        let html = '<div class="rep-chart-groups">';
         keys.forEach(k => {
             const g = groups[k];
             g.items.sort((a, b) => heatOf(b) - heatOf(a));  // 组内按综合热度倒序
@@ -1070,6 +1070,7 @@ function renderChartHits(songs, byChart, lastRun) {
             }).join('');
             html += `</div></div>`;
         });
+        html += '</div>';
         hits.innerHTML = html;
     }
     const bc = $('repChartByChart');
