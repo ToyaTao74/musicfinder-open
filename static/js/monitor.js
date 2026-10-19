@@ -959,11 +959,12 @@ function renderReport(d) {
     }
 
     // 榜单上榜
-    renderChartHits(d.chart_hits_songs || [], d.chart_hits_by_chart || [], d.last_chart_run || null);
+    renderChartHits(d.chart_hits_songs || [], d.last_chart_run || null,
+                    d.chart_moves || [], d.chart_records || []);
 }
 
 // ── 榜单上榜渲染 ──────────────────────────────────────
-function renderChartHits(songs, byChart, lastRun) {
+function renderChartHits(songs, lastRun, moves, records) {
     // 榜单来源清单（透明展示「抓的是什么榜」+ 实际抓取是否成功）
     const m = (lastRun && lastRun.message) || '';
     const qqN = parseInt((m.match(/qq=(\d+)/) || [])[1] || '0', 10);
@@ -982,7 +983,7 @@ function renderChartHits(songs, byChart, lastRun) {
     }
 
     const empty = $('repChartEmpty'), content = $('repChartContent');
-    if (!songs.length && !byChart.length) {
+    if (!songs.length && !(moves || []).length && !(records || []).length) {
         empty.hidden = false; content.hidden = true;
         if (lastRun && /hits=0/.test(lastRun.message || '')) {
             empty.innerHTML = `已抓取过榜单（${esc(lastRun.finished_at || '')}）。<b>你监控的歌今天没有冲进这些榜</b>`
@@ -1073,20 +1074,54 @@ function renderChartHits(songs, byChart, lastRun) {
         html += '</div>';
         hits.innerHTML = html;
     }
-    const bc = $('repChartByChart');
-    if (!byChart.length) {
-        bc.innerHTML = '<div class="mon-empty">暂无榜单汇总</div>';
+    // 冲榜动态：期间内名次涨跌 / 新上榜
+    const mvBox = $('repChartMoves');
+    const mvList = moves || [];
+    if (!mvList.length) {
+        mvBox.innerHTML = '<div class="mon-empty">期间内名次基本持平（没有明显涨跌），也没有新上榜</div>';
     } else {
-        bc.innerHTML = byChart.map(x => `
-            <div class="rep-chart-row">
-                <div></div>
-                <div>
-                    <div class="rep-chart-title">${esc(x.chart_name || x.chart_id)}</div>
-                    <div class="rep-chart-artist">${esc(x.platform || '')} · 最佳 #${x.best_rank} / 最差 #${x.worst_rank}</div>
+        mvBox.innerHTML = mvList.map(x => {
+            const delta = x.rank_delta || 0;
+            const isNew = x.is_new === 1 || x.is_new === '1';
+            const badge = isNew
+                ? '<span class="rep-move-badge new">🆕 新上榜</span>'
+                : (delta > 0
+                    ? `<span class="rep-move-badge up">↑${delta}</span>`
+                    : `<span class="rep-move-badge down">↓${Math.abs(delta)}</span>`);
+            return `<div class="rep-move-row">
+                <div class="rep-chart-c1">
+                    <div class="rep-chart-title">${esc(x.song_name || '')}</div>
+                    <div class="rep-chart-artist">${esc(x.artist || '—')} · <span class="rep-chart-platform ${x.platform || ''}">${esc(x.platform || '')}</span> · ${esc(x.chart_name || x.chart_id || '')}</div>
                 </div>
-                <div></div>
-                <div class="rep-chart-rank">${x.c}</div>
-            </div>`).join('');
+                <div class="rep-move-right">
+                    <span class="rep-move-rank">#${x.rank}</span>
+                    ${badge}
+                    <span class="rep-move-date">${esc(x.stat_date || '')}</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // 榜单纪录：历史最佳 / 连续在榜 / 首次上榜（全历史累计）
+    const rcBox = $('repChartRecords');
+    const rcList = records || [];
+    if (!rcList.length) {
+        rcBox.innerHTML = '<div class="mon-empty">还没有历史上榜纪录</div>';
+    } else {
+        rcBox.innerHTML = rcList.map(x => {
+            const d = (x.first_date || '').slice(5);  // 2026-10-01 → 10-01
+            return `<div class="rep-move-row">
+                <div class="rep-chart-c1">
+                    <div class="rep-chart-title">${esc(x.song_name || '')}</div>
+                    <div class="rep-chart-artist">${esc(x.artist || '—')} · <span class="rep-chart-platform ${x.platform || ''}">${esc(x.platform || '')}</span></div>
+                </div>
+                <div class="rep-move-right">
+                    <span class="rep-rec-meta">历史最佳 <b class="rep-rec-best">#${x.best_ever}</b></span>
+                    <span class="rep-rec-meta">连续在榜 <b>${x.streak || 1}</b> 天</span>
+                    <span class="rep-rec-meta">首次 ${esc(d)}</span>
+                </div>
+            </div>`;
+        }).join('');
     }
 }
 

@@ -298,6 +298,54 @@ def get_report(period='day', stat_date=None):
     except Exception:
         chart_hits_songs = []
 
+    # ── 冲榜动态：期间内名次涨跌 / 新上榜（正 delta = 名次升，负 = 降）──
+    chart_moves = []
+    try:
+        mv_rows = conn.execute("""
+            SELECT ch.archive_id, ch.platform, ch.chart_id, ch.chart_name,
+                   ch.stat_date, ch.rank, ch.prev_rank, ch.rank_delta, ch.is_new,
+                   sa.song_name, sa.artist
+            FROM chart_hit ch
+            JOIN song_archive sa ON sa.id = ch.archive_id
+            WHERE ch.stat_date BETWEEN ? AND ?
+              AND (ch.is_new = 1 OR (ch.rank_delta IS NOT NULL AND ch.rank_delta != 0))
+            ORDER BY ch.stat_date DESC, ABS(ch.rank_delta) DESC
+            LIMIT 20
+        """, (start_s, end_s)).fetchall()
+        chart_moves = [dict(r) for r in mv_rows]
+    except Exception:
+        chart_moves = []
+
+    # ── 榜单纪录（全历史累计）：每首每平台 历史最佳名次 / 首次上榜 / 连续在榜天数 ──
+    chart_records = []
+    try:
+        rec_rows = conn.execute("""
+            SELECT ch.archive_id, ch.platform,
+                   MIN(ch.rank) best_ever,
+                   MIN(ch.stat_date) first_date,
+                   MAX(ch.stat_date) latest_date,
+                   sa.song_name, sa.artist
+            FROM chart_hit ch
+            JOIN song_archive sa ON sa.id = ch.archive_id
+            GROUP BY ch.archive_id, ch.platform
+        """).fetchall()
+        dates_map = {}
+        for r in conn.execute("SELECT archive_id, platform, stat_date FROM chart_hit"):
+            dates_map.setdefault((r['archive_id'], r['platform']), set()).add(r['stat_date'])
+        for r in rec_rows:
+            d = dict(r)
+            ds = dates_map.get((d['archive_id'], d['platform']), set())
+            streak = 0
+            cur = _parse_date(d['latest_date'])
+            while cur and cur.strftime('%Y-%m-%d') in ds:
+                streak += 1
+                cur -= timedelta(days=1)
+            d['streak'] = streak
+            chart_records.append(d)
+        chart_records.sort(key=lambda x: (x['best_ever'] if x['best_ever'] is not None else 99999))
+    except Exception:
+        chart_records = []
+
     has_growth = len(dates_covered) >= 2
 
     return {
@@ -318,6 +366,8 @@ def get_report(period='day', stat_date=None):
         'chart_hits_recent': chart_hits_recent,
         'chart_hits_by_chart': chart_hits_by_chart,
         'chart_hits_songs': chart_hits_songs,
+        'chart_moves': chart_moves,
+        'chart_records': chart_records,
         'platform_coverage': cov,
         'alerts': alerts,
         'last_chart_run': last_chart_run,
