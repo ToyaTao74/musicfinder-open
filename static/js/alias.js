@@ -95,25 +95,40 @@
             ).join('') + '</span>';
     }
 
-    /* ── 渲染：已生效白名单（按添加日期从新到旧排序，v4.30.59）── */
+    /* ── 渲染：已生效白名单（按添加日期从新到旧 v4.30.59；搜索过滤 v4.30.60）── */
+    let _aliasState = { aliases: {}, addedAt: {} };  // 最近一次接口数据，搜索时用它重渲染
+    function aliasSearchQ() {
+        const el = document.getElementById('aliasSearch');
+        return ((el && el.value) || '').trim().toLowerCase();
+    }
     function renderAliases(aliases, addedAt) {
         const tb = document.getElementById('aliasListTable');
         if (!tb) return;
         addedAt = addedAt || {};
+        const q = aliasSearchQ();
         const latestOf = base => {
             const m = addedAt[base] || {};
             let mx = '';
             (aliases[base] || []).forEach(v => { if ((m[v] || '') > mx) mx = m[v]; });
             return mx;
         };
+        // 搜索：基名或任一变体命中即保留（不分大小写）
+        let bases = Object.keys(aliases || {});
+        if (q) {
+            bases = bases.filter(base =>
+                base.toLowerCase().indexOf(q) !== -1 ||
+                (aliases[base] || []).some(v => (v || '').toLowerCase().indexOf(q) !== -1));
+        }
         // 有添加日期的在前、新→旧；无时间戳的旧条目垫底按基名排
-        const bases = Object.keys(aliases || {}).sort((a, b) => {
+        bases.sort((a, b) => {
             const ta = latestOf(a), tb2 = latestOf(b);
             if (ta !== tb2) return ta > tb2 ? -1 : 1;
             return a.localeCompare(b);
         });
         if (!bases.length) {
-            tb.innerHTML = '<tr><td class="alias-empty">暂无配置——系统遇到候选时会提示你确认</td></tr>';
+            tb.innerHTML = '<tr><td class="alias-empty">' + (q
+                ? '没有匹配「' + escapeHtml(q) + '」的白名单条目'
+                : '暂无配置——系统遇到候选时会提示你确认') + '</td></tr>';
             return;
         }
         tb.innerHTML = '<tr><th>基名（曲库/常用名）</th><th>变体（平台写法 / 改名后）</th><th>歌手主页</th><th>添加日期</th></tr>' +
@@ -190,7 +205,8 @@
     }
 
     function renderAll(d) {
-        renderAliases(d.aliases, d.added_at);
+        _aliasState = { aliases: d.aliases || {}, addedAt: d.added_at || {} };
+        renderAliases(_aliasState.aliases, _aliasState.addedAt);
         renderSuggestions(d.suggestions);
     }
 
@@ -224,9 +240,27 @@
         [base, alias].forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') apply(); }));
     }
 
+    /* ── 搜索框（自注入到白名单表格上方，v4.30.60）── */
+    function ensureSearchBox() {
+        const tb = document.getElementById('aliasListTable');
+        if (!tb || document.getElementById('aliasSearch')) return;
+        const host = tb.closest('.alias-card') || tb.parentElement;
+        const wrap = document.createElement('div');
+        wrap.className = 'alias-add';
+        wrap.style.marginBottom = '10px';
+        const inp = document.createElement('input');
+        inp.id = 'aliasSearch';
+        inp.type = 'text';
+        inp.placeholder = '🔍 搜索基名或变体（实时过滤）';
+        inp.addEventListener('input', () => renderAliases(_aliasState.aliases, _aliasState.addedAt));
+        wrap.appendChild(inp);
+        host.insertBefore(wrap, tb);
+    }
+
     function init() {
         if (!document.getElementById('tab-alias')) return;
         ensureStyle();
+        ensureSearchBox();
         initAdd();
         bindDelegation();
         const tabBtn = document.querySelector('.tab-btn[data-tab="alias"]');
