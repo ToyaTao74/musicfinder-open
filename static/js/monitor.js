@@ -362,9 +362,14 @@ async function loadReview(page) {
 }
 
 function renderReviewItem(it) {
-    const cands = it.candidates || [];
+    const candsRaw = it.candidates || [];
+    // 展示按收藏量从高到低排（缺失/null 垫底）；data-idx 保留服务端原始索引，
+    // 确认接口 /review/confirm 的 choice_index 指向服务端 candidates 数组，不能错位
+    const cands = candsRaw.slice(0, 6)
+        .map((c, i) => ({ c, i }))
+        .sort((a, b) => ((b.c.collection_count ?? -1) - (a.c.collection_count ?? -1)));
     const wj = [it.lyricist, it.composer].filter(Boolean).join(' / ');
-    const cardsHtml = cands.length ? cands.slice(0, 6).map((c, i) => {
+    const cardsHtml = cands.length ? cands.map(({ c, i }) => {
         const url = c.url || '';
         const link = url ? `<a class="mon-cand-link" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="在新页打开试听">▶ 试听</a>` : '';
         const cwj = [c.lyricist, c.composer].filter(Boolean).join(' / ');
@@ -410,7 +415,7 @@ function renderReviewItem(it) {
         </div>
         <div class="mon-cands">${cardsHtml}</div>
         <div class="mon-ri-foot">
-            <span class="mon-hint">点上面那张对的卡片即可锁定为正版</span>
+            <span class="mon-hint">已按收藏量从高到低排 · 点对的那张卡片即可锁定为正版</span>
             <button class="btn-danger mon-ri-reject" data-sp="${it.sp_id}" type="button">平台没有这首</button>
         </div>
     </div>`;
