@@ -258,6 +258,27 @@ def get_report(period='day', stat_date=None):
     except Exception:
         pass
 
+    # 等效角标数据源：每 (歌,平台,榜单) 近 60 天按日名次序列 + 全历史首次上榜日
+    # 平台的「昨日热播/新歌上榜/持续上升」角标在 App 签名接口里拿不到（公开接口实测无此字段），
+    # 用自有抓榜记录计算同义标签。
+    hist, first_map = {}, {}
+    try:
+        _hist = conn.execute("""
+            SELECT archive_id, platform, chart_id, stat_date, rank
+            FROM chart_hit WHERE stat_date >= date(?, '-60 day')
+            ORDER BY stat_date
+        """, (end_s,)).fetchall()
+        for r in _hist:
+            hist.setdefault((r['archive_id'], r['platform'], r['chart_id']), {})[r['stat_date']] = r['rank']
+        _first = conn.execute("""
+            SELECT archive_id, platform, chart_id, MIN(stat_date) AS first_date
+            FROM chart_hit GROUP BY archive_id, platform, chart_id
+        """).fetchall()
+        first_map = {(r['archive_id'], r['platform'], r['chart_id']): r['first_date']
+                     for r in _first}
+    except Exception:
+        hist, first_map = {}, {}
+
     # 期间内的命中按「歌 + 平台 + 具体榜单」聚合（分组展示用：
     # 每个榜单分组下列出上榜的监控歌曲，含上榜次数与综合热度）
     chart_hits_songs = []
@@ -294,6 +315,22 @@ def get_report(period='day', stat_date=None):
             # 综合热度：名次越靠前分值越高（rank 1→499，rank 500→0）+ 每次上榜加权
             rank_score = max(0, 500 - min(d['best_rank'] or 500, 500))
             d['heat_score'] = round((d['cnt'] or 0) * 30 + rank_score, 1)
+            # 等效角标：新歌上榜 > 昨日热播 > 持续上升
+            key = (d['archive_id'], d['platform'], d['chart_id'])
+            seq = hist.get(key) or {}
+            dates_sorted = sorted(seq.keys())
+            badge = None
+            if len(dates_sorted) >= 2:
+                d1, d0 = dates_sorted[-1], dates_sorted[-2]
+                pd1, pd0 = _parse_date(d1), _parse_date(d0)
+                if pd1 and pd0 and (pd1 - pd0).days == 1:
+                    badge = 'hot'          # 昨日热播：昨天+今天连续在榜
+                elif (seq[d1] or 9999) < (seq[d0] or 0):
+                    badge = 'rise'         # 持续上升：最新名次比上一抓榜日前进
+            fd = first_map.get(key)
+            if fd and fd >= (end_d - timedelta(days=6)).strftime('%Y-%m-%d') and fd <= end_s:
+                badge = 'new'              # 新歌上榜：近 7 天内首次登上该榜
+            d['badge'] = badge
             chart_hits_songs.append(d)
     except Exception:
         chart_hits_songs = []

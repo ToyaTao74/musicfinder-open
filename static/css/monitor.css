@@ -487,6 +487,16 @@
 .rep-chart-cnt { font-size: 17px; font-weight: 800; color: var(--text-primary); font-family: ui-monospace, Menlo, monospace; line-height: 1.1; }
 .rep-chart-cnt small { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-left: 1px; }
 
+/* 等效角标（自算）：新歌上榜 / 昨日热播 / 持续上升 */
+.rep-song-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 999px; margin-left: 5px;
+    white-space: nowrap; vertical-align: 2px; line-height: 1.5;
+}
+.rep-song-badge.b-new { color: #d97706; background: rgba(245, 158, 11, 0.15); }
+.rep-song-badge.b-hot { color: #dc2626; background: rgba(220, 38, 38, 0.10); }
+.rep-song-badge.b-rise { color: #16a34a; background: rgba(22, 163, 74, 0.12); }
+
 /* 冲榜动态 / 榜单纪录 行 */
 .rep-move-row {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;

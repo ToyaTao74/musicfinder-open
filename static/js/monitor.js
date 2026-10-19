@@ -1055,9 +1055,12 @@ function renderChartHits(songs, lastRun, moves, records) {
                 const latest = (x.latest_rank != null) ? x.latest_rank : x.best_rank;
                 const best = x.best_rank;
                 const cnt = x.cnt || 0;
+                // 等效角标（自算）：new=新歌上榜 / hot=昨日热播 / rise=持续上升
+                const BADGE_LABEL = { new: '新歌上榜', hot: '昨日热播', rise: '持续上升' };
+                const badge = x.badge ? `<span class="rep-song-badge b-${x.badge}">${BADGE_LABEL[x.badge] || ''}</span>` : '';
                 return `<div class="rep-chart-row3">
                     <div class="rep-chart-c1">
-                        <div class="rep-chart-title">${esc(x.song_name || '')}</div>
+                        <div class="rep-chart-title">${esc(x.song_name || '')}${badge}</div>
                         <div class="rep-chart-artist">${esc(x.artist || '—')} · <span class="rep-chart-platform ${platform}">${esc(platform)}</span>${lockTag(x)}</div>
                     </div>
                     <div class="rep-chart-c2">
