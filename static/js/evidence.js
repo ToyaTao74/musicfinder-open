@@ -866,9 +866,35 @@
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !m.hidden) closeDouyinLoginModal(); });
   }
 
+  // ── P3：本地 Agent 三指示灯轮询 ──
+  async function pollAgentStatus() {
+    try {
+      const r = await fetch('/api/evidence/agent_status');
+      const j = await r.json();
+      if (j.ok) renderAgentStatus(j.data);
+    } catch (e) { /* 网关不可达时由后端返回 reachable=false */ }
+  }
+  function renderAgentStatus(d) {
+    const set = (id, on) => { const el = document.getElementById(id); if (el) el.className = 'ev-led ' + (on ? 'on' : 'off'); };
+    set('ledAgent', d.agent_online);
+    set('ledChrome', d.chrome_connected);
+    set('ledLogin', d.douyin_logged_in);
+    const tip = document.getElementById('evAgentTip');
+    if (tip) {
+      if (!d.gateway_reachable) tip.textContent = '⚠ 网关不可达（Agent 网关未启动）';
+      else if (!d.agent_online) tip.textContent = '本地 Agent 离线，请启动你电脑上的 Agent';
+      else if (!d.douyin_logged_in) tip.textContent = '抖音登录态失效，请在本地 Agent 重新扫码登录';
+      else tip.textContent = '就绪：可在云端点「抖音取证」由本地浏览器执行';
+    }
+  }
+
   window.loadEvidencePage = async function () {
     if (!bind._done) { bind(); bind._done = true; }
     bindDouyinModal();
+    if (!state.agentTimer) {
+      state.agentTimer = setInterval(pollAgentStatus, 15000);
+      pollAgentStatus();
+    }
     try { await loadStats(); await loadTasks(); } catch (e) { console.error(e); }
   };
 })();

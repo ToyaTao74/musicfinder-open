@@ -394,6 +394,29 @@ def api_douyin_status():
                                           'note': '未登录时运行 `python -m evidence.platforms.douyin login` 扫码登录一次'}})
 
 
+@bp.route('/agent_status', methods=['GET'])
+def api_agent_status():
+    """读取独立 Agent 网关的在线/Chrome/登录态三状态，供前端指示灯展示。"""
+    import urllib.request
+    gw = os.environ.get('AGENT_GATEWAY_HTTP', 'http://127.0.0.1:8766')
+    try:
+        with urllib.request.urlopen(f'{gw}/agents', timeout=5) as r:
+            data = json.loads(r.read())
+        agents = data.get('agents', {})
+        online = bool(agents)
+        chrome = any((a or {}).get('chrome_connected') for a in agents.values())
+        login = any((a or {}).get('douyin_logged_in') for a in agents.values())
+        return jsonify({'ok': True, 'data': {
+            'gateway_reachable': True, 'agent_online': online,
+            'chrome_connected': chrome, 'douyin_logged_in': login, 'agents': agents,
+        }})
+    except Exception as e:
+        return jsonify({'ok': True, 'data': {
+            'gateway_reachable': False, 'agent_online': False,
+            'chrome_connected': False, 'douyin_logged_in': False,
+            'error': str(e), 'agents': {}}})
+
+
 @bp.route('/douyin/preflight', methods=['GET'])
 def api_douyin_preflight():
     """检测 patchright + chromium 是否就绪（弹窗第一步用）"""

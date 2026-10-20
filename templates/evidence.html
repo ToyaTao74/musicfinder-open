@@ -14,6 +14,23 @@
   {# 状态横幅：明确告知「还差什么才能跑出有意义的盗版判决」 #}
   <div class="ev-banner" id="evBanner" hidden></div>
 
+  {# 本地 Agent 三指示灯（抖音取证由本地浏览器执行时显示） #}
+  <div class="ev-agent-bar" id="evAgentBar">
+    <span class="ev-led off" id="ledAgent"><i></i>本地 Agent</span>
+    <span class="ev-led off" id="ledChrome"><i></i>Chrome 连接</span>
+    <span class="ev-led off" id="ledLogin"><i></i>抖音登录态</span>
+    <span class="ev-agent-tip" id="evAgentTip">检测中…</span>
+  </div>
+  <style>
+    .ev-agent-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 4px;padding:8px 12px;
+      background:#f6f8fa;border:1px solid #e3e8ee;border-radius:10px;font-size:13px}
+    .ev-led{display:inline-flex;align-items:center;gap:6px;color:#8a94a6;font-weight:600}
+    .ev-led i{width:10px;height:10px;border-radius:50%;background:#c4ccd6;display:inline-block;box-shadow:0 0 0 3px rgba(0,0,0,.04)}
+    .ev-led.on{color:#1f9d55}.ev-led.on i{background:#1f9d55;box-shadow:0 0 0 3px rgba(31,157,85,.15)}
+    .ev-led.off i{background:#e0564f;box-shadow:0 0 0 3px rgba(224,86,79,.12)}
+    .ev-agent-tip{color:#6b7280;margin-left:auto}
+  </style>
+
   <div class="ev-stat-grid" id="evStats"></div>
 
   <div class="ev-grid">
