@@ -10,10 +10,10 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.60'
-_BUILD_STAMP        = '20261019.07'  # v4.30.60：艺名管理新增白名单搜索框（alias.js 自注入，基名/变体实时过滤不分大小写；无结果给提示），排序仍按添加日期新→旧。
-APP_VERSION_NAME   = 'v4.30.60 艺名管理：白名单搜索'
-APP_VERSION_DATE   = '2026-10-19'
+APP_VERSION        = '4.30.61'
+_BUILD_STAMP        = '20261020.01'  # v4.30.61：证据监测台三指示灯补回云端（/agent_status 代理 Agent 网关 + 前端指示灯条）。今日 STG 同步时 evidence 三件套缺 P3 改动导致云端丢失该功能，本次补齐——云端与本地 10-15 部署的 P3 代码重新一致。
+APP_VERSION_NAME   = 'v4.30.61 证据台三指示灯补回云端'
+APP_VERSION_DATE   = '2026-10-20'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
 from flask import Flask, g, render_template, jsonify, request, make_response, Response, stream_with_context, session
