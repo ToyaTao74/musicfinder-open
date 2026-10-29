@@ -44,3 +44,11 @@ Thumbs.db
 # Playwright 浏览器二进制（仅 CI 打包时下载，体积大，勿提交）
 pw_browsers/
 latest.json
+
+# 本地 Agent 链路依赖（只提交源码，node_modules 不入库）
+agent/node_modules/
+
+# Agent 网关运行时文件不入库
+agent_gateway/tokens.json
+agent_gateway/__pycache__/
+agent_gateway/evidence_inbox/

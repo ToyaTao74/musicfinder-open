@@ -387,12 +387,25 @@ def _rank(cands):
 
 _RE_SUBTITLE = re.compile(r'[\(（\[【].*?[\)）\]】]')
 
+# v4.30.72：伴奏类条目默认剔除 —— 平台搜「XXX」常混入「XXX (伴奏)」「(Instrumental)」
+# 「(Karaoke Version)」，这类不是原曲，锁了就是错库。仅当库歌名本身不带伴奏字样时
+# 才过滤（真要监测伴奏版是特例，届时库歌名里就含"伴奏"二字，不会被误伤）。
+_RE_ACCOMP = re.compile(r'伴奏|纯音乐|instrumental|accompaniment|karaoke', re.IGNORECASE)
+
+
+def _is_accomp_variant(cand_name, lib_name):
+    """候选是否为伴奏类变体（库歌名不含伴奏字样时成立）。"""
+    cn, ln = str(cand_name or ''), str(lib_name or '')
+    return bool(_RE_ACCOMP.search(cn)) and not _RE_ACCOMP.search(ln)
+
 
 def _has_solid(lst, song_name, artist, lyricist='', composer=''):
     """该平台是否已拿到「可自动锁定」级别的结果 —— 是则不再补搜，省请求。"""
     if not lst:
         return False
     for c in lst:
+        if _is_accomp_variant(c.get('song_name', ''), song_name):
+            continue                     # 伴奏变体不算 solid，继续找原版
         m = score_candidate(c, song_name, artist, lyricist, composer)
         strong_name = m['exact_same'] or m['name_type'] == 'exact'
         if strong_name and (m['artist_exact'] or m['artist_subset'] or
@@ -504,6 +517,9 @@ def match_one(song_name, artist='', lyricist='', composer='', platforms=None,
         scored = []
         for i, c in enumerate(lst):
             if not c.get(ID_FIELD[p]):
+                continue
+            # v4.30.72：伴奏/纯音乐/Karaoke 类候选默认剔除（库歌名本身含"伴奏"的不受影响）
+            if _is_accomp_variant(c.get('song_name', ''), song_name):
                 continue
             c = dict(c)
             c['_idx'] = i
@@ -623,9 +639,26 @@ def match_archive(limit=None, only_status=('pending', 'partial'), platforms=None
                 best_conf = conf
 
         new_status = 'partial' if unreliable else 'matched'
+        # v4.30.72：词曲自动回填 —— 库档案没词曲时，用「自动锁定(high)」平台返回的
+        # 词曲补上（QQ 走详情解析、酷狗/网易搜索自带）。mid/low 待人工确认后才回填
+        # （routes.api_review_confirm），避免把同名他唱的词曲写进自家档案。
+        best_ly, best_co = '', ''
+        if best_conf == db.CONF_HIGH:
+            for p in todo:
+                r = res[p]
+                if r.get('error') or r.get('confidence') != db.CONF_HIGH:
+                    continue
+                b = r['best'] or {}
+                best_ly = best_ly or str(b.get('lyricist') or '').strip()
+                best_co = best_co or str(b.get('composer') or '').strip()
+                if best_ly and best_co:
+                    break
         with db.tx() as c:
-            c.execute('UPDATE song_archive SET status=?, updated_at=? WHERE id=?',
-                      (new_status, db.now_str(), row['id']))
+            c.execute("""UPDATE song_archive SET status=?, updated_at=?,
+                         lyricist=CASE WHEN lyricist='' THEN ? ELSE lyricist END,
+                         composer=CASE WHEN composer='' THEN ? ELSE composer END
+                         WHERE id=?""",
+                      (new_status, db.now_str(), best_ly, best_co, row['id']))
         with lock:
             stat['done'] += 1
             if unreliable:

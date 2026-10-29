@@ -1,0 +1,5 @@
+evidence_inbox/
+__pycache__/
+*.pyc
+_smoke_v2.py
+*.log

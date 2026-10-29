@@ -291,6 +291,7 @@ def get_report(period='day', stat_date=None):
                    MIN(ch.rank) best_rank,
                    MAX(ch.rank) worst_rank,
                    MAX(ch.stat_date) latest_date,
+                   MIN(ch.stat_date) first_date,
                    (SELECT rank FROM chart_hit c2
                       WHERE c2.archive_id = ch.archive_id AND c2.platform = ch.platform
                         AND c2.chart_id = ch.chart_id
@@ -425,6 +426,86 @@ def _song_view(s, arch):
         'prev_collection': s['prev_collection'],
         'cur_comment': s['cur_comment'],
     }
+
+
+def build_chart_xlsx(data):
+    """榜单上榜播报 → xlsx（3 个 sheet：上榜歌曲 / 冲榜动态 / 榜单纪录）。返回 BytesIO。"""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    head_font = Font(bold=True, color='FFFFFF')
+    head_fill = PatternFill('solid', fgColor='4472C4')
+    PF = dict(db.PLATFORM_NAMES) if hasattr(db, 'PLATFORM_NAMES') else {}
+    BADGE = {'new': '新歌上榜', 'hot': '昨日热播', 'rise': '持续上升'}
+
+    def _sheet(ws, title, headers, rows):
+        ws.title = title
+        ws.append(headers)
+        for c in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=c)
+            cell.font = head_font
+            cell.fill = head_fill
+        for r in rows:
+            ws.append(r)
+        for i, h in enumerate(headers, 1):
+            width = max([len(str(h))] + [len(str(r[i - 1])) if i <= len(r) and r[i - 1] is not None else 0 for r in rows[:50]])
+            ws.column_dimensions[get_column_letter(i)].width = min(max(width * 1.6 + 4, 8), 44)
+        ws.freeze_panes = 'A2'
+
+    # Sheet1 上榜歌曲（按平台+榜单分组，组间空行带分组标题）
+    ws1 = wb.active
+    groups = {}
+    for x in data.get('chart_hits_songs') or []:
+        cname = (x.get('chart_name') or x.get('chart_id') or '').strip()
+        for pre in ('QQ音乐', '酷狗音乐', '酷狗', '网易云'):
+            if cname.startswith(pre):
+                cname = cname[len(pre):]
+                break
+        groups.setdefault((x.get('platform'), cname or '榜单'), []).append(x)
+    rows1 = []
+    for (pf, cname), items in groups.items():
+        rows1.append([f'{PF.get(pf, pf)} - {cname} · 上榜 {len(items)} 首', '', '', '', '', '', '', '', ''])
+        rows1.append(['歌曲', '表演者', '当前名次', '最佳名次', '上榜次数', '首次上榜', '最近上榜', '角标', '平台无原版'])
+        for x in items:
+            latest = x.get('latest_rank') if x.get('latest_rank') is not None else x.get('best_rank')
+            rows1.append([x.get('song_name'), x.get('artist'),
+                          f'#{latest}' if latest is not None else '',
+                          f"#{x.get('best_rank')}" if x.get('best_rank') is not None else '',
+                          x.get('cnt') or 0,
+                          (x.get('first_date') or '')[:10],
+                          (x.get('latest_date') or '')[:10],
+                          BADGE.get(x.get('badge'), ''),
+                          '是' if not x.get('platform_locked') else ''])
+        rows1.append([''] * 9)
+    _sheet(ws1, '上榜歌曲', ['榜单上榜播报', '', '', '', '', '', '', '', ''], rows1)
+
+    # Sheet2 冲榜动态
+    rows2 = [[x.get('song_name'), x.get('artist'), PF.get(x.get('platform'), x.get('platform')),
+              x.get('chart_name') or x.get('chart_id'), f"#{x.get('rank')}",
+              ('新上榜' if x.get('is_new') in (1, '1') else
+               (f"↑{x.get('rank_delta')}" if (x.get('rank_delta') or 0) > 0
+                else f"↓{abs(x.get('rank_delta') or 0)}")),
+              x.get('stat_date') or '']
+             for x in data.get('chart_moves') or []]
+    _sheet(wb.create_sheet(), '冲榜动态',
+           ['歌曲', '表演者', '平台', '榜单', '名次', '变动', '日期'], rows2)
+
+    # Sheet3 榜单纪录（全历史）
+    rows3 = [[x.get('song_name'), x.get('artist'), PF.get(x.get('platform'), x.get('platform')),
+              f"#{x.get('best_ever')}" if x.get('best_ever') is not None else '',
+              x.get('streak') or 1,
+              (x.get('first_date') or '')[:10], (x.get('latest_date') or '')[:10]]
+             for x in data.get('chart_records') or []]
+    _sheet(wb.create_sheet(), '榜单纪录',
+           ['歌曲', '表演者', '平台', '历史最佳', '连续在榜(天)', '首次上榜', '最近在榜'], rows3)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
 
 
 def _empty_report(period, reason='no_metrics'):

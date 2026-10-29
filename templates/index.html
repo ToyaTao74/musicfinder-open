@@ -7,10 +7,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260819f') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20261021b') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/batch-embed.css', v='20260807n') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/playlist-marks.css', v='20260819d') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/monitor.css', v='20260815c') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/monitor.css', v='20261021i') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/evidence.css', v='20260812a') }}">
 </head>
 <body>
@@ -53,71 +53,96 @@
 <main class="main">
 
     <!-- 标签页导航 -->
-    <nav class="tab-nav">
-        <button class="tab-btn active" data-tab="search">
+    <nav class="tab-nav tab-nav-grouped">
+        <div class="tab-group z-search">
+            <div class="tab-group-label">搜索工具</div>
+            <div class="tab-group-btns">
+            <button class="tab-btn active" data-tab="search">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
             <span>音乐搜索</span>
         </button>
-        <button class="tab-btn" data-tab="batch">
+            <button class="tab-btn" data-tab="batch">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                 <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
             </svg>
             <span>批量歌单</span>
         </button>
-        <button class="tab-btn" data-tab="hearts">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-            <span>红心管理</span>
-        </button>
-        <button class="tab-btn" data-tab="settings">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span>Cookie 设置</span>
-        </button>
-        <button class="tab-btn" data-tab="marks">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-            </svg>
-            <span>标记歌曲</span>
-        </button>
-        <button class="tab-btn" data-tab="playlist">
+            <button class="tab-btn" data-tab="playlist">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                 <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
             </svg>
             <span>我的歌单</span>
         </button>
-        <button class="tab-btn" data-tab="monitor">
+            </div>
+        </div>
+        <div class="tab-group z-hearts">
+            <div class="tab-group-label">收藏管理</div>
+            <div class="tab-group-btns">
+            <button class="tab-btn" data-tab="hearts">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            <span>红心管理</span>
+        </button>
+            <button class="tab-btn" data-tab="marks">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>标记歌曲</span>
+        </button>
+            </div>
+        </div>
+        <div class="tab-group z-mon">
+            <div class="tab-group-label">数据监测</div>
+            <div class="tab-group-btns">
+            <button class="tab-btn" data-tab="monitor">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
             </svg>
             <span>数据监控</span>
             <span class="tab-dot" id="monTabDot" hidden></span>
         </button>
-        <button class="tab-btn" data-tab="evidence">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M8 11h6"/>
-            </svg>
-            <span>证据监测</span>
-        </button>
-        <button class="tab-btn" data-tab="report">
+            <button class="tab-btn" data-tab="report">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
             <span>运营报告</span>
         </button>
-        <button class="tab-btn" data-tab="alias">
+            </div>
+        </div>
+        <div class="tab-group z-ev">
+            <div class="tab-group-label">维权取证</div>
+            <div class="tab-group-btns">
+            <button class="tab-btn" data-tab="evidence">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M8 11h6"/>
+            </svg>
+            <span>证据监测</span>
+        </button>
+            <button class="tab-btn" data-tab="alias">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>
             </svg>
             <span>艺名管理</span>
         </button>
+            </div>
+        </div>
+        <div class="tab-group z-set">
+            <div class="tab-group-label">系统设置</div>
+            <div class="tab-group-btns">
+            <button class="tab-btn" data-tab="settings">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Cookie 设置</span>
+        </button>
+            </div>
+        </div>
     </nav>
 
     <!-- ═══ 搜索标签页 ═══ -->
@@ -677,6 +702,9 @@
                 .v2-recent-empty{font-size:12px;opacity:.5;padding:8px 0;}
                 /* 大表格底部提示：超过 N 行时引导用户去 Excel 看全量 */
                 .v2-recent-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;opacity:.75;}
+                /* v4.30.78：display:flex 会压过 hidden 属性的 UA display:none，导致
+                   底部提示一旦显示就永远关不掉（残留「共 2 首已全部显示」假文案）。 */
+                .v2-recent-foot[hidden]{display:none!important;}
                 .v2-recent-foot .link-btn{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;text-decoration:none;}
                 .v2-recent-table .idx{font-family:ui-monospace,Menlo,monospace;opacity:.55;font-variant-numeric:tabular-nums;text-align:right;}
                 .v2-recent-table .match{display:inline-block;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.3px;}
@@ -1134,13 +1162,13 @@
 
 <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/artist_home.js') }}?v=20260914e"></script>
-<script src="{{ url_for('static', filename='js/global_help.js') }}?v=20260916a"></script>
+<script src="{{ url_for('static', filename='js/global_help.js') }}?v=20261028b"></script>
 <script src="{{ url_for('static', filename='js/app.js', v='20260916a') }}"></script>
-<script src="{{ url_for('static', filename='js/alias.js') }}?v=20260916d"></script>
-<script src="{{ url_for('static', filename='js/batch.js') }}?v=20260915e"></script>
+<script src="{{ url_for('static', filename='js/alias.js') }}?v=20261028b"></script>
+<script src="{{ url_for('static', filename='js/batch.js') }}?v=20261028d"></script>
 <script src="{{ url_for('static', filename='js/marks.js', v='20260807d') }}"></script>
 <script src="{{ url_for('static', filename='js/playlist.js', v='20260826a') }}"></script>
-<script src="{{ url_for('static', filename='js/monitor.js', v='20260815d') }}"></script>
+<script src="{{ url_for('static', filename='js/monitor.js', v='20261028a') }}"></script>
 <script src="{{ url_for('static', filename='js/evidence.js', v='20260828g') }}"></script>
 
 <!-- ════════ 多用户登录 / 注册（v4.7） ════════ -->

@@ -874,6 +874,70 @@
       if (j.ok) renderAgentStatus(j.data);
     } catch (e) { /* 网关不可达时由后端返回 reachable=false */ }
   }
+
+  // ── v4.30.64：本地助手配置面板（直连本机控制口 57080）──
+  const CTRL = 'http://127.0.0.1:57080';
+  async function ctrlFetch(path, opts, timeoutMs = 2500) {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), timeoutMs);
+    try {
+      const r = await fetch(CTRL + path, { ...opts, signal: c.signal });
+      return await r.json();
+    } finally { clearTimeout(t); }
+  }
+  async function helperCheck() {
+    const el = document.getElementById('evHelperState');
+    const diag = document.getElementById('evHelperDiag');
+    if (!el) return false;
+    try {
+      const s = await ctrlFetch('/status');
+      if (s && s.ok) {
+        el.textContent = '✅ 本地助手运行中' + (s.douyin_logged_in ? ' · 抖音已登录' : ' · 抖音未登录');
+        el.className = 'ev-helper-state ok';
+        if (diag) diag.textContent = '';
+        return true;
+      }
+    } catch (e) { /* 本地口不在 */ }
+    el.textContent = '⚠️ 本机未检测到助手（第一次使用请先装安装包；已装过请稍候 10 秒再试）';
+    el.className = 'ev-helper-state bad';
+    if (diag) diag.textContent = '说明：浏览器无法凭空启动本机程序，首次安装需双击一次安装脚本；之后助手开机自启，本面板所有按钮即可直接生效。';
+    return false;
+  }
+  function bindHelperModal() {
+    const m = document.getElementById('evHelperModal');
+    if (!m || bindHelperModal._done) return;
+    bindHelperModal._done = true;
+    const close = () => { m.hidden = true; };
+    document.getElementById('evHelperClose').addEventListener('click', close);
+    m.addEventListener('click', (e) => { if (e.target === m) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !m.hidden) close(); });
+    document.getElementById('evAgentCfgBtn').addEventListener('click', async () => {
+      m.hidden = false;
+      await helperCheck();
+    });
+    document.getElementById('evHelperScan').addEventListener('click', async function () {
+      const note = document.getElementById('evHelperScanNote');
+      this.disabled = true;
+      try {
+        // 优先：直连唤起（Chrome 私网保护可能拦截 fetch，故需降级路径）
+        let ok = false, msg = '';
+        try {
+          const r = await ctrlFetch('/scan', { method: 'POST' }, 4000);
+          ok = !!(r && r.ok);
+          msg = (r && r.error) || '';
+        } catch (e) { /* PNA 拦截 → 降级 */ }
+        if (ok) {
+          note.textContent = '已打开扫码窗口，请在弹出的 Chrome 里扫码（完成后窗口自动关闭，指示灯 3 分钟内变绿）';
+        } else {
+          // 降级：新标签顶级导航不受私网保护限制
+          window.open(CTRL + '/scan', '_blank');
+          note.textContent = '已在新标签页唤起扫码（若新标签显示「无法访问」说明助手未运行，请先装安装包）';
+        }
+      } finally {
+        this.disabled = false;
+      }
+    });
+  }
   function renderAgentStatus(d) {
     const set = (id, on) => { const el = document.getElementById(id); if (el) el.className = 'ev-led ' + (on ? 'on' : 'off'); };
     set('ledAgent', d.agent_online);
@@ -883,7 +947,7 @@
     if (tip) {
       if (!d.gateway_reachable) tip.textContent = '⚠ 网关不可达（Agent 网关未启动）';
       else if (!d.agent_online) tip.textContent = '本地 Agent 离线，请启动你电脑上的 Agent';
-      else if (!d.douyin_logged_in) tip.textContent = '抖音登录态失效，请在本地 Agent 重新扫码登录';
+      else if (!d.douyin_logged_in) tip.textContent = '抖音未登录：在电脑上双击「① 抖音扫码登录」完成一次登录（长期有效）';
       else tip.textContent = '就绪：可在云端点「抖音取证」由本地浏览器执行';
     }
   }
@@ -891,6 +955,7 @@
   window.loadEvidencePage = async function () {
     if (!bind._done) { bind(); bind._done = true; }
     bindDouyinModal();
+    bindHelperModal();
     if (!state.agentTimer) {
       state.agentTimer = setInterval(pollAgentStatus, 15000);
       pollAgentStatus();

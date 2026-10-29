@@ -205,7 +205,21 @@
     flex: 0 0 260px; padding: 12px 14px; border-radius: 12px; cursor: pointer;
     border: 1px solid var(--glass-border); background: var(--bg-elevated);
     transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
 }
+/* v4.30.72：候选卡右上角「监测」勾选 —— 勾选的版本可一键加入监测名单 */
+.mon-cand-watch {
+    position: absolute; top: 6px; right: 8px; z-index: 2;
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11.5px; color: var(--text-tertiary); cursor: pointer;
+    background: var(--bg-elevated); border: 1px solid var(--glass-border);
+    border-radius: 10px; padding: 3px 10px; user-select: none;
+}
+.mon-cand-watch:hover { color: #22965e; border-color: #22965e; }
+.mon-cand-watch:has(input:checked) { color: #22965e; border-color: #22965e; background: rgba(34,150,94,.08); }
+.mon-cand-watch input { accent-color: #22965e; margin: 0; cursor: pointer; }
+/* 勾选后整卡绿描边，一眼确认勾上了（防止"以为点中勾选框其实点在卡片上"的误锁） */
+.mon-cand:has(.mon-cand-pick:checked) { border-color: #22965e; box-shadow: 0 0 0 1.5px rgba(34,150,94,.45); }
 [data-theme="light"] .mon-cand { background: rgba(255,255,255,0.85); }
 .mon-cand:hover {
     border-color: var(--accent); transform: translateY(-2px);
@@ -213,7 +227,7 @@
 }
 .mon-cand-name { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
 .mon-cand-line { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
-.mon-cand-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.mon-cand-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding-right: 70px; }
 .mon-cand-link {
     flex-shrink: 0; font-size: 11px; color: var(--accent); text-decoration: none;
     white-space: nowrap; opacity: 0.8; transition: opacity 0.2s;
@@ -316,6 +330,13 @@
 [data-theme="light"] .mon-toast { background: #fff; }
 .mon-toast.ok  { border-color: rgba(16,185,129,0.4); }
 .mon-toast.err { border-color: rgba(239,68,68,0.45); color: #EF4444; }
+/* 锁定 toast 的「撤销」按钮（误点保险，6 秒内有效） */
+.mon-toast-undo {
+    margin-left: 6px; padding: 3px 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid rgba(16,185,129,0.5); background: rgba(16,185,129,0.1);
+    color: #0f8f56; font-size: 12px; font-weight: 700;
+}
+.mon-toast-undo:hover { background: rgba(16,185,129,0.22); }
 @keyframes monToastIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── 步骤三：每日采集进度 ── */
@@ -478,8 +499,9 @@
 .rep-chart-c1 { min-width: 0; }
 .rep-chart-c2 { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
 .rep-chart-c3 { text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
-.rep-chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rep-chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .rep-chart-artist { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.rep-chart-date { font-size: 11px; color: #8a94a6; margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
 .rep-chart-rank { font-size: 16px; font-weight: 800; color: var(--accent); font-family: ui-monospace, Menlo, monospace; line-height: 1.1; }
 .rep-chart-best { font-size: 10.5px; color: var(--text-secondary); font-family: ui-monospace, Menlo, monospace; }
 .rep-chart-badge { font-size: 12px; font-weight: 600; color: var(--text-primary); background: rgba(99, 102, 241, 0.1); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
@@ -780,3 +802,94 @@
 }
 
 
+
+/* 榜单播报复制/导出工具条 */
+.rep-chart-tools{display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap}
+.rep-chart-tools .btn-ghost{padding:4px 12px;font-size:13px}
+.rep-chart-tools-tip{font-size:13px;color:#1f9d55;font-weight:600}
+
+/* 实时榜单固定展示 */
+.rep-board-list{display:flex;flex-direction:column;gap:2px}
+.rep-board-row{display:flex;align-items:center;gap:10px;padding:5px 8px;border-radius:8px;font-size:13px}
+.rep-board-row:nth-child(odd){background:#f7f9fb}
+.rep-board-row.hit{background:#fff8e1;outline:1px solid #f0d47a}
+.rep-board-rank{width:30px;text-align:center;font-weight:700;color:#5b6b7f;flex:none}
+.rep-board-row:nth-child(-n+3) .rep-board-rank{color:#e0564f}
+.rep-board-main{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;overflow:hidden}
+.rep-board-main b{white-space:normal;overflow:visible;text-overflow:unset;word-break:break-word;color:#2a3547}
+.rep-board-main small{color:#8a94a6;white-space:normal;overflow:visible;text-overflow:unset;word-break:break-word}
+.rep-board-star{flex:none;font-size:13px}
+.rep-board-stale{color:#c77c11;font-weight:600;margin-left:6px}
+
+/* 实时榜单：监测命中分类徽标 */
+.rep-board-summary{margin:0 0 10px;padding:7px 12px;background:#eef6ff;border:1px solid #c9e0f7;border-radius:9px;font-size:13px;color:#3b5b7d}
+.rep-board-badge{flex:none;font-size:12px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.rep-board-badge.b-exact{background:#fff3cd;color:#8a6d00}
+.rep-board-badge.b-same{background:#ffe8d9;color:#a4470a}
+.rep-board-badge.b-sim{background:#e2ecfb;color:#28599c}
+.rep-board-row.hit{background:#fff8e1;outline:1px solid #f0d47a}
+.rep-board-row.same{background:#fff2ea;outline:1px solid #f3c9a8}
+.rep-board-row.sim{background:#f0f6ff;outline:1px solid #c9ddf5}
+
+/* 雷达卡片：列表限高，6 榜抬头均无需页面滚动即可见（内容超长卡内滚动） */
+.rep-board-list{max-height:236px;overflow-y:auto;padding-right:2px}
+.rep-board-row{padding:4px 8px}
+.rep-board-row .rep-board-mute{flex:none;border:none;background:none;cursor:pointer;font-size:13px;
+  opacity:0;transition:opacity .12s;padding:2px 4px;border-radius:6px;line-height:1}
+.rep-board-row:hover .rep-board-mute{opacity:.45}
+.rep-board-row .rep-board-mute:hover{opacity:1;background:rgba(0,0,0,.06)}
+.rep-board-row .rep-board-add{flex:none;border:none;background:none;cursor:pointer;font-size:13px;
+  opacity:0;transition:opacity .12s;padding:2px 4px;border-radius:6px;line-height:1}
+.rep-board-row:hover .rep-board-add{opacity:.55}
+.rep-board-row .rep-board-add:hover{opacity:1;background:rgba(34,150,94,.12)}
+.rep-board-row .rep-board-add:disabled{opacity:1;cursor:default}
+.rep-mute-entry{margin-left:10px;border:1px solid var(--border-soft);background:#fff;border-radius:14px;
+  font-size:11.5px;padding:2px 10px;cursor:pointer;color:#6b7280;font-weight:600}
+.rep-mute-entry:hover{color:#2a3547;border-color:#b8c2cf}
+.radar-mute-list{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow-y:auto;margin:8px 0 4px}
+.radar-mute-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--border-soft);
+  border-radius:9px;font-size:13px;background:#fafbfc}
+.radar-mute-main{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;overflow:hidden}
+.radar-mute-main b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.radar-mute-main small{color:#8a94a6;white-space:nowrap}
+.radar-mute-time{color:#a8b2bf;font-size:11.5px;flex:none}
+.radar-mute-row .modal-btn{padding:3px 10px;font-size:12px;flex:none}
+
+/* ══ v4.30.72 功能区块划分 + 使用导览 ══ */
+.mon-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 20px; margin-bottom: 16px; }
+.mon-toolbar-title { margin: 0; font-size: 17px; font-weight: 700; }
+.mon-toolbar-sub { margin: 2px 0 0; font-size: 12.5px; color: var(--text-tertiary); }
+.mon-zone-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 2px 10px; }
+.mon-zone-tag { font-size: 11px; font-weight: 800; letter-spacing: .5px; color: #fff;
+  border-radius: 8px; padding: 2.5px 9px; }
+.mon-zone-tag.z-view { background: #64748b; }
+.mon-zone-tag.z-daily { background: #22965e; }
+.mon-zone-tag.z-arch { background: #3b82f6; }
+.mon-zone-tag.z-setup { background: #9462e0; }
+.mon-zone-title { font-size: 14.5px; font-weight: 700; }
+.mon-zone-sub { font-size: 12px; color: var(--text-tertiary); }
+.mon-card-ico { width: 40px; height: 40px; flex: none; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; font-size: 19px;
+  background: rgba(59,130,246,.12); }
+.mon-zone-fold { margin: 20px 0 8px; border: 1px dashed var(--glass-border);
+  border-radius: 14px; background: color-mix(in srgb, var(--bg-elevated) 70%, transparent); }
+.mon-zone-fold > summary { cursor: pointer; padding: 12px 18px; font-size: 13px;
+  font-weight: 600; color: var(--text-secondary); user-select: none; list-style: none; }
+.mon-zone-fold > summary::before { content: '▸'; display: inline-block; margin-right: 8px;
+  transition: transform .18s; }
+.mon-zone-fold[open] > summary::before { transform: rotate(90deg); }
+.mon-fold-state { margin-left: 10px; font-size: 12px; color: #d97706; font-weight: 700; }
+.mon-fold-body { padding: 4px 10px 12px; }
+.mon-fold-body .mon-card { margin-bottom: 12px; }
+
+/* 吸顶锚点导航（v4.30.72）：点击跳转对应区块；v4.30.73 top 让位于吸顶主菜单（高 60px） */
+.mon-anchor-nav { position: sticky; top: 60px; z-index: 50; display: flex; gap: 6px;
+  padding: 9px 10px; margin: 0 0 14px; border-radius: 14px;
+  background: rgba(255,255,255,.88); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border); box-shadow: 0 4px 18px rgba(15,23,42,.06); }
+.mon-anchor { border: none; background: none; cursor: pointer; font-size: 13px;
+  font-weight: 600; color: var(--text-secondary); padding: 6px 14px; border-radius: 10px;
+  transition: all .15s; }
+.mon-anchor:hover { background: rgba(59,130,246,.08); color: #2563eb; }
+.mon-anchor.active { background: #22965e; color: #fff; }

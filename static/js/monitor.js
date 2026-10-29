@@ -256,6 +256,11 @@ async function pollMatch() {
         const total = run.total || 0, done = (run.done || 0) + (run.failed || 0);
         const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0;
         fill.style.width = pct + '%';
+        // 匹配在跑时：自动展开折叠的「建立流程」区，别让进度藏起来
+        const fold = $('monSetupFold'), foldState = $('monFoldState');
+        if (fold && job.running && !fold.open) { fold.open = true; }
+        if (foldState) foldState.textContent = job.running
+            ? `机器正在跑匹配 ${done}/${total}…` : '';
         const spd = run.duration_s && done ? ` · 约 ${(run.duration_s / done).toFixed(1)}s/首` : '';
         const eta = (total && done && job.running)
             ? ` · 剩余约 ${fmtDur((total - done) * (elapsed(run) / Math.max(done, 1)))}` : '';
@@ -370,8 +375,6 @@ function renderReviewItem(it) {
         .sort((a, b) => ((b.c.collection_count ?? -1) - (a.c.collection_count ?? -1)));
     const wj = [it.lyricist, it.composer].filter(Boolean).join(' / ');
     const cardsHtml = cands.length ? cands.map(({ c, i }) => {
-        const url = c.url || '';
-        const link = url ? `<a class="mon-cand-link" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="在新页打开试听">▶ 试听</a>` : '';
         const cwj = [c.lyricist, c.composer].filter(Boolean).join(' / ');
         const wjLine = cwj ? `<div class="mon-cand-line mon-cand-wj">词曲：${esc(cwj)}</div>` : '';
         let badge;
@@ -387,9 +390,12 @@ function renderReviewItem(it) {
         const ccLine = `<div class="mon-cand-line mon-cand-cc${hasCC ? '' : ' mon-cand-cc-none'}">收藏量：${hasCC ? fmtCount(c.collection_count) : '—'}</div>`;
         return `
         <div class="mon-cand" data-sp="${it.sp_id}" data-idx="${i}">
+            <label class="mon-cand-watch" title="勾选即加入监测名单（自动匹配三平台、每日跟踪）；卡片不会被收走">
+                <input type="checkbox" class="mon-cand-pick"
+                    data-song="${esc(c.name || '')}" data-artist="${esc(c.artist || '')}"> <span class="mon-watch-txt">监测</span>
+            </label>
             <div class="mon-cand-head">
                 <div class="mon-cand-name">${esc(c.name || '（无名）')}</div>
-                ${link}
             </div>
             <div class="mon-cand-line">${esc(c.artist || '—')}</div>
             ${wjLine}
@@ -415,17 +421,38 @@ function renderReviewItem(it) {
         </div>
         <div class="mon-cands">${cardsHtml}</div>
         <div class="mon-ri-foot">
-            <span class="mon-hint">已按收藏量从高到低排 · 点对的那张卡片即可锁定为正版</span>
             <button class="btn-danger mon-ri-reject" data-sp="${it.sp_id}" type="button">平台没有这首</button>
+            <span class="mon-hint">点卡片锁定正版 · 右上角勾「监测」= 把该版本加入名单（不锁定、不收卡）</span>
         </div>
     </div>`;
 }
 
 async function confirmChoice(spId, idx) {
+    // 动线（用户 2026-10-21 定）：点候选卡 = 直接锁定为我监测的正版，不弹窗；
+    // 勾选「监测」的衍生版本走下方「➕ 勾选的加入监测」确认键。
     try {
         await apiJson('/review/confirm', { sp_id: +spId, choice_index: +idx });
         markResolved(spId, '已锁定为正版');
+        undoConfirmToast(spId);
     } catch (e) { toast(e.message, 'err'); }
+}
+
+// 锁定后 6 秒内可一键撤销（误点保险）：解锁 + 退回复核 + 自动重匹配
+function undoConfirmToast(spId) {
+    const el = document.createElement('div');
+    el.className = 'mon-toast ok mon-undo-toast';
+    el.innerHTML = '已锁定为正版　<button class="mon-toast-undo" type="button">撤销</button>';
+    el.querySelector('.mon-toast-undo').addEventListener('click', async () => {
+        try {
+            await apiJson('/review/undo_confirm', { sp_id: +spId });
+            toast('已撤销，正在重新匹配这首', 'ok');
+            loadReview(reviewPage);
+        } catch (e) { toast(e.message, 'err'); }
+        el.remove();
+    });
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(10px)'; }, 6000);
+    setTimeout(() => el.remove(), 6400);
 }
 
 async function rejectOne(spId) {
@@ -964,8 +991,83 @@ function renderReport(d) {
     }
 
     // 榜单上榜
+    _chartMeta = { start: d.start_date || '', end: d.end_date || '', label: d.period_label || '' };
     renderChartHits(d.chart_hits_songs || [], d.last_chart_run || null,
                     d.chart_moves || [], d.chart_records || []);
+    renderChartBoard();
+    bindRadarMute();
+}
+
+// ── 榜单播报复制/导出（数据缓存 + TSV 生成）──────────────
+let _chartMeta = { start: '', end: '', label: '' };
+let _chartExportData = { songs: [], moves: [], records: [] };
+
+function buildChartTSV() {
+    const { songs, moves, records } = _chartExportData;
+    const PF_NAMES = { qq: 'QQ音乐', kugou: '酷狗音乐', netease: '网易云' };
+    const BADGE = { new: '新歌上榜', hot: '昨日热播', rise: '持续上升' };
+    const PREFIXES = ['QQ音乐', '酷狗音乐', '酷狗', '网易云'];
+    const chartLabel = (platform, name) => {
+        let lbl = (name || '').trim() || ((PF_NAMES[platform] || platform) + '榜单');
+        for (const pf of PREFIXES) {
+            if (lbl.indexOf(pf) === 0) { lbl = lbl.slice(pf.length); break; }
+        }
+        return lbl || ((PF_NAMES[platform] || platform) + '榜');
+    };
+    const esc = (s) => String(s == null ? '' : s).replace(/\t/g, ' ').replace(/\r?\n/g, ' ');
+    const L = [];
+    const range = (_chartMeta.start && _chartMeta.end) ? `${_chartMeta.start} ~ ${_chartMeta.end}` : '';
+    L.push(`【榜单上榜播报】${range}${_chartMeta.label ? '（' + _chartMeta.label + '）' : ''}`);
+
+    if (songs.length) {
+        // 按「平台 + 榜单」分组（与页面渲染一致）
+        const groups = {};
+        songs.forEach(x => {
+            const k = (x.platform || '?') + '||' + (x.chart_name || x.chart_id || '?');
+            (groups[k] = groups[k] || { platform: x.platform, chart_name: x.chart_name, chart_id: x.chart_id, items: [] }).items.push(x);
+        });
+        Object.values(groups).forEach(g => {
+            const pname = PF_NAMES[g.platform] || g.platform;
+            L.push('');
+            L.push(`■ ${pname} - ${chartLabel(g.platform, g.chart_name)} · 上榜 ${g.items.length} 首`);
+            L.push(['歌曲', '表演者', '当前名次', '最佳名次', '上榜次数', '首次上榜', '最近上榜', '角标', '平台无原版'].join('\t'));
+            g.items.forEach(x => {
+                const latest = (x.latest_rank != null) ? x.latest_rank : x.best_rank;
+                L.push([esc(x.song_name), esc(x.artist),
+                        latest != null ? '#' + latest : '',
+                        x.best_rank != null ? '#' + x.best_rank : '',
+                        x.cnt || 0,
+                        esc((x.first_date || '').slice(0, 10)),
+                        esc((x.latest_date || '').slice(0, 10)),
+                        BADGE[x.badge] || '',
+                        x.platform_locked ? '' : '是'].join('\t'));
+            });
+        });
+    }
+    if ((moves || []).length) {
+        L.push('');
+        L.push('■ 冲榜动态（期间内名次涨跌 / 新上榜）');
+        L.push(['歌曲', '表演者', '平台', '榜单', '名次', '变动', '日期'].join('\t'));
+        moves.forEach(x => {
+            const delta = x.rank_delta || 0;
+            const change = (x.is_new === 1 || x.is_new === '1') ? '新上榜'
+                : (delta > 0 ? '↑' + delta : '↓' + Math.abs(delta));
+            L.push([esc(x.song_name), esc(x.artist), PF_NAMES[x.platform] || x.platform || '',
+                    esc(x.chart_name || x.chart_id || ''),
+                    x.rank != null ? '#' + x.rank : '', change, esc(x.stat_date)].join('\t'));
+        });
+    }
+    if ((records || []).length) {
+        L.push('');
+        L.push('■ 榜单纪录（全历史累计）');
+        L.push(['歌曲', '表演者', '平台', '历史最佳', '连续在榜(天)', '首次上榜'].join('\t'));
+        records.forEach(x => {
+            L.push([esc(x.song_name), esc(x.artist), PF_NAMES[x.platform] || x.platform || '',
+                    x.best_ever != null ? '#' + x.best_ever : '',
+                    x.streak || 1, esc((x.first_date || '').slice(0, 10))].join('\t'));
+        });
+    }
+    return L.join('\n');
 }
 
 // ── 榜单上榜渲染 ──────────────────────────────────────
@@ -1003,8 +1105,7 @@ function renderChartHits(songs, lastRun, moves, records) {
         return;
     }
     empty.hidden = true; content.hidden = false;
-
-    // 平台显示名（本地兜底，避免依赖全局常量缺失）
+    _chartExportData = { songs: songs, moves: moves || [], records: records || [] };
     const PF_NAMES = { qq: 'QQ音乐', kugou: '酷狗音乐', netease: '网易云' };
     const PLAT_ORDER = ['qq', 'kugou', 'netease'];
     const PREFIXES = ['QQ音乐', '酷狗音乐', '酷狗', '网易云'];
@@ -1067,6 +1168,11 @@ function renderChartHits(songs, lastRun, moves, records) {
                     <div class="rep-chart-c1">
                         <div class="rep-chart-title">${esc(x.song_name || '')}${badge}</div>
                         <div class="rep-chart-artist">${esc(x.artist || '—')} · <span class="rep-chart-platform ${platform}">${esc(platform)}</span>${lockTag(x)}</div>
+                        ${(() => {
+                            const fd = (x.first_date || '').slice(5), ld = (x.latest_date || '').slice(5);
+                            if (!ld) return '';
+                            return `<div class="rep-chart-date">📅 上榜 ${esc(String(x.days || x.cnt || 0))} 天${fd && fd !== ld ? `（${esc(fd)} ~ ${esc(ld)}）` : ''} · 最近 ${esc(ld)}</div>`;
+                        })()}
                     </div>
                     <div class="rep-chart-c2">
                         <span class="rep-chart-cnt">${cnt}<small>次</small></span>
@@ -1130,6 +1236,166 @@ function renderChartHits(songs, lastRun, moves, records) {
                 </div>
             </div>`;
         }).join('');
+    }
+}
+
+// ── 实时榜单固定展示（各平台热歌/飙升榜 Top 10，无监控命中也展示）──
+async function renderChartBoard() {
+    const box = $('repChartBoard');
+    if (!box) return;
+    let j;
+    try {
+        const r = await fetch(API + '/report/chart_board');
+        j = await r.json();
+    } catch (e) { box.innerHTML = '<div class="mon-empty">榜单加载失败</div>'; return; }
+    if (!j.ok) { box.innerHTML = '<div class="mon-empty">榜单加载失败：' + esc(j.error || '') + '</div>'; return; }
+    const PF_NAMES = { qq: 'QQ音乐', kugou: '酷狗音乐', netease: '网易云' };
+    const PREFIXES = ['QQ音乐', '酷狗音乐', '酷狗', '网易云'];
+    const chartLabel = (name, fallback) => {
+        let lbl = (name || '').trim() || fallback;
+        for (const pf of PREFIXES) {
+            if (lbl.indexOf(pf) === 0) { lbl = lbl.slice(pf.length); break; }
+        }
+        return lbl || fallback;
+    };
+    const today = new Date();
+    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const ORDER = ['qq', 'kugou', 'netease'];
+    const boards = (j.boards || []).slice().sort((a, b) =>
+        ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform));
+    let html = '<div class="rep-chart-groups">';
+    let totalHits = 0;
+    boards.forEach(bd => {
+        const pname = PF_NAMES[bd.platform] || bd.platform;
+        const label = chartLabel(bd.chart_name, bd.chart_id);
+        const stale = bd.stat_date && bd.stat_date !== todayStr;
+        const hits = bd.items || [];
+        totalHits += hits.length;
+        let body;
+        if (!bd.total) {
+            body = '<div class="mon-empty">还没有数据，点上方「🔄 立即抓今日榜」</div>';
+        } else if (!hits.length) {
+            body = `<div class="mon-empty">今日 ${bd.total} 首在榜，无相关线索</div>`;
+        } else {
+            body = hits.map(it => {
+                let badge = '';
+                if (it.kind === 'exact') badge = '<span class="rep-board-badge b-exact" title="歌名和歌手都与你的监测歌曲一致（此行与「我司歌曲上榜」重复，正常不出现）">⭐ 监控命中</span>';
+                else if (it.kind === 'same_name') badge = `<span class="rep-board-badge b-same" title="榜单歌手「${esc(it.artist)}」≠ 监测歌手「${esc(it.matched_artist)}」，疑似翻唱/盗版">👥 同名不同歌手</span>`;
+                else badge = `<span class="rep-board-badge b-sim" title="与监测歌曲《${esc(it.matched_to)}》歌名相似度 ${Math.round(it.sim * 100)}%">🔍 相似 ${Math.round(it.sim * 100)}%</span>`;
+                return `<div class="rep-board-row ${it.kind === 'exact' ? 'hit' : it.kind === 'same_name' ? 'same' : 'sim'}">
+                    <span class="rep-board-rank">${it.rank}</span>
+                    <span class="rep-board-main"><b>${esc(it.song_name)}</b><small>${esc(it.artist)}</small></span>
+                    ${badge}
+                    <button class="rep-board-add" type="button" data-song="${esc(it.song_name)}" data-artist="${esc(it.artist)}"
+                        title="把这首歌加入监测名单（自动去三平台找原版并每日跟踪）">➕</button>
+                    <button class="rep-board-mute" type="button" data-song="${esc(it.song_name)}" data-artist="${esc(it.artist)}"
+                        title="不再显示这首歌（按歌曲屏蔽，不影响监测库）">🔕</button>
+                </div>`;
+            }).join('');
+        }
+        html += `<div class="rep-chart-group">
+            <div class="rep-chart-group-h">【${esc(pname)} - ${esc(label)}】${stale ? `<small class="rep-board-stale">数据 ${esc(bd.stat_date)}</small>` : ''}</div>
+            <div class="rep-board-list">${body}</div>
+        </div>`;
+    });
+    html += '</div>';
+    const mutedN = j.muted_total || 0;
+    if (totalHits) html = `<div class="rep-board-summary">今日发现 <b>${totalHits}</b> 条同名/相似线索（👥 同名不同歌手 · 🔍 相似歌名），可能是翻唱/盗版上榜，建议人工核对；行尾 ➕ 一键加入监测名单，🔕 屏蔽误报</div>` + html;
+    box.innerHTML = html;
+    const cnt = $('radarMuteCount');
+    if (cnt) cnt.textContent = mutedN ? `(${mutedN})` : '';
+}
+
+// ── 雷达屏蔽名单：行内屏蔽 + 管理弹窗（v4.30.71） ──
+function bindRadarMute() {
+    const box = $('repChartBoard');
+    if (box && !box._muteBound) {
+        box._muteBound = true;
+        box.addEventListener('click', async (e) => {
+            const addBtn = e.target.closest('.rep-board-add');
+            if (addBtn) {
+                const song = addBtn.dataset.song, artist = addBtn.dataset.artist;
+                if (!confirm(`把榜单里的《${song}》${artist ? '（' + artist + '）' : ''}加入监测名单？\n加入后自动去 QQ/酷狗/网易云找这首歌并每日跟踪数据。`)) return;
+                addBtn.disabled = true; addBtn.textContent = '…';
+                try {
+                    const d = await apiJson('/archive/add', {
+                        song_name: song, artist,
+                        batch: '榜单雷达导入@' + new Date().toISOString().slice(0, 10),
+                        auto_match: true
+                    });
+                    if (d.duplicate) {
+                        toast('这首已经在监测名单里了', 'warn');
+                        addBtn.textContent = '✓'; addBtn.title = '已在监测名单';
+                    } else {
+                        toast(`《${song}》已加入监测名单`, 'ok');
+                        if (d.match_started) toast('已后台开始去三平台找原版', 'ok');
+                        loadArchive(archivePage); loadStats();
+                        renderChartBoard();   // 缓存失效后重算：该行变"监控命中"，移入我司歌曲上榜
+                    }
+                } catch (err) {
+                    addBtn.disabled = false; addBtn.textContent = '➕';
+                    toast('加入失败：' + (err.message || err), 'err');
+                }
+                return;
+            }
+            const btn = e.target.closest('.rep-board-mute');
+            if (!btn) return;
+            const song = btn.dataset.song, artist = btn.dataset.artist;
+            if (!confirm(`屏蔽《${song}》${artist ? '（' + artist + '）' : ''}？\n之后这首歌不再出现在雷达里（不影响监测库）。`)) return;
+            try {
+                await fetch(API + '/report/radar_mutes', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ song_name: song, artist })
+                });
+                renderChartBoard();
+            } catch (err) { alert('屏蔽失败：' + err.message); }
+        });
+    }
+    const openBtn = $('radarMuteBtn');
+    if (openBtn && !openBtn._bound) {
+        openBtn._bound = true;
+        openBtn.addEventListener('click', openRadarMuteModal);
+    }
+    const overlay = $('radarMuteOverlay');
+    if (overlay && !overlay._bound) {
+        overlay._bound = true;
+        $('radarMuteClose').addEventListener('click', () => overlay.hidden = true);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.hidden = true; });
+        $('radarMuteClear').addEventListener('click', async () => {
+            if (!confirm('清空全部屏蔽名单？雷达会重新显示这些歌曲。')) return;
+            await fetch(API + '/report/radar_mutes?all=1', { method: 'DELETE' });
+            openRadarMuteModal();
+            renderChartBoard();
+        });
+    }
+}
+
+async function openRadarMuteModal() {
+    const overlay = $('radarMuteOverlay'), list = $('radarMuteList');
+    list.innerHTML = '<div class="mon-empty">加载中…</div>';
+    overlay.hidden = false;
+    try {
+        const r = await fetch(API + '/report/radar_mutes');
+        const j = await r.json();
+        const items = j.items || [];
+        if (!items.length) {
+            list.innerHTML = '<div class="mon-empty">暂无屏蔽记录。雷达里点每行的 🔕 即可屏蔽。</div>';
+            return;
+        }
+        list.innerHTML = items.map(x => `<div class="radar-mute-row">
+            <span class="radar-mute-main"><b>${esc(x.song_name)}</b>${x.artist ? `<small>${esc(x.artist)}</small>` : ''}</span>
+            <small class="radar-mute-time">${esc(x.added_at || '')}</small>
+            <button class="modal-btn" type="button" data-key="${esc(x.key)}">恢复显示</button>
+        </div>`).join('');
+        list.querySelectorAll('button[data-key]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                await fetch(API + '/report/radar_mutes?key=' + encodeURIComponent(btn.dataset.key), { method: 'DELETE' });
+                openRadarMuteModal();
+                renderChartBoard();
+            });
+        });
+    } catch (e) {
+        list.innerHTML = '<div class="mon-empty">加载失败</div>';
     }
 }
 
@@ -1770,13 +2036,82 @@ function bindOnce() {
     $('repRefreshBtn').addEventListener('click', () => triggerDaily(() => loadReport(reportPeriod)));
     $('repChartRefresh').addEventListener('click', () => triggerChart(() => loadReport(reportPeriod)));
 
+    // 榜单播报：复制表格 / 导出 Excel
+    $('repChartCopy').addEventListener('click', async () => {
+        const tip = $('repChartToolsTip');
+        const tsv = buildChartTSV();
+        if (tsv.trim().split('\n').length < 2) {
+            tip.textContent = '暂无可复制的数据';
+            setTimeout(() => { tip.textContent = ''; }, 3000);
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(tsv);
+            tip.textContent = '✓ 已复制，去微信 / Excel 直接粘贴即可成表格';
+        } catch (e) {
+            // 剪贴板 API 不可用时兜底：临时文本域
+            const ta = document.createElement('textarea');
+            ta.value = tsv;
+            ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy');
+            ta.remove();
+            tip.textContent = ok ? '✓ 已复制，去微信 / Excel 直接粘贴即可成表格' : '复制失败，请改用「导出 Excel」';
+        }
+        setTimeout(() => { tip.textContent = ''; }, 4000);
+    });
+    $('repChartExport').addEventListener('click', () => {
+        const p = (typeof reportPeriod === 'string' && reportPeriod) ? reportPeriod : 'day';
+        const a = document.createElement('a');
+        a.href = `${API}/report/chart_export?period=${encodeURIComponent(p)}`;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    });
+
+    // v4.30.72：铁闸 —— 捕获阶段拦下勾选区的点击，先于一切冒泡 handler（重复绑定也拦得住）
+    $('monReviewList').addEventListener('click', (e) => {
+        if (e.target.closest('.mon-cand-watch')) e.stopPropagation();
+    }, true);
     // 候选卡片 / 拒绝按钮 —— 事件委托
     $('monReviewList').addEventListener('click', e => {
+        if (e.target.closest('.mon-cand-watch')) return;   // 勾「监测」不复核锁定，也不冒泡
         const cand = e.target.closest('.mon-cand');
         if (cand) return confirmChoice(cand.dataset.sp, cand.dataset.idx);
         const rej = e.target.closest('.mon-ri-reject');
         if (rej) return rejectOne(rej.dataset.sp);
     });
+    // 勾选「监测」= 立即加入监测名单（change 委托，勾上才触发）
+    $('monReviewList').addEventListener('change', e => {
+        const pick = e.target.closest('.mon-cand-pick');
+        if (pick && pick.checked) return watchOne(pick);
+    });
+}
+
+// v4.30.72：勾选「监测」= 立即加入监测名单（一次操作，无二次确认）；
+// 卡片不收走（并未锁定正版）；勾选框变 ✓ 已操作态。
+async function watchOne(pick) {
+    const label = pick.closest('.mon-cand-watch');
+    const txt = label.querySelector('.mon-watch-txt');
+    pick.disabled = true;
+    try {
+        const d = await apiJson('/archive/add', {
+            song_name: pick.dataset.song, artist: pick.dataset.artist,
+            batch: '复核勾选导入@' + new Date().toISOString().slice(0, 10),
+            auto_match: true
+        });
+        label.classList.add('added');
+        txt.textContent = d.duplicate ? '已在名单' : '已监测 ✓';
+        toast(d.duplicate
+            ? `《${pick.dataset.song}》本来就在监测名单里`
+            : `《${pick.dataset.song}》已加入监测名单，后台自动匹配三平台`, 'ok');
+        if (!d.duplicate) { loadStats(); loadArchive(archivePage); }
+    } catch (e) {
+        pick.disabled = false; pick.checked = false;
+        toast('加入失败：' + (e.message || e), 'err');
+    }
 }
 
 // ── 榜监控触发 ──────────────────────────────────────
@@ -1840,4 +2175,40 @@ fetch(API + '/stats').then(r => r.json()).then(j => {
     }
 }).catch(() => {});
 
+})();
+
+// ══ 吸顶锚点导航（v4.30.72）：点击跳转 + 滚动高亮当前区块 ══
+(function bindMonAnchorNav() {
+    const nav = document.getElementById('monAnchorNav');
+    if (!nav) return;
+    const btns = [...nav.querySelectorAll('.mon-anchor')];
+    const targets = btns.map(b => document.querySelector(b.dataset.target)).filter(Boolean);
+
+    btns.forEach(btn => btn.addEventListener('click', () => {
+        const el = document.querySelector(btn.dataset.target);
+        if (!el) return;
+        if (btn.dataset.target === '#monSetupFold') el.open = true;   // 折叠区先展开再跳
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        btns.forEach(x => x.classList.remove('active'));
+        btn.classList.add('active');
+    }));
+
+    // 滚动时高亮最接近视口顶部的区块
+    const onScroll = () => {
+        let cur = 0;
+        targets.forEach((el, k) => { if (el.getBoundingClientRect().top <= 140) cur = k; });
+        btns.forEach((b, k) => b.classList.toggle('active', k === cur));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // v4.30.73：主菜单吸顶后，锚点条与跳转目标让位于主菜单实际高度（窄屏折行时自动适配）
+    const tabNav = document.querySelector('.tab-nav');
+    const syncTop = () => {
+        if (!tabNav) return;
+        const h = tabNav.getBoundingClientRect().height;
+        nav.style.top = Math.round(h) + 'px';
+        targets.forEach(el => { el.style.scrollMarginTop = Math.round(h + 14) + 'px'; });
+    };
+    syncTop();
+    window.addEventListener('resize', syncTop);
 })();

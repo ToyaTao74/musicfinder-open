@@ -48,7 +48,12 @@ _XVFB_PROC = None
 
 
 def _ensure_display():
-    """无 DISPLAY 的 Linux 环境按需启动 Xvfb :99；已有多余进程只启一次。"""
+    """无 DISPLAY 的 Linux 环境按需启动 Xvfb :99；已有多余进程只启一次。
+    macOS 的 launchd GUI 会话没有 DISPLAY 变量但 headful Chrome 可直接弹窗
+    （WindowServer 权限来自 GUI domain），darwin 一律放行。"""
+    import sys
+    if sys.platform == 'darwin':
+        return True
     global _XVFB_PROC
     if os.environ.get('DISPLAY'):
         return True

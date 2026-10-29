@@ -114,9 +114,85 @@ button:disabled{cursor:not-allowed;opacity:.5;}
         } catch (e) { /* 隐私模式忽略 */ }
     }
 
+/* ═══ 页面内居中确认框（v4.30.80）═══
+ * 原生 confirm() 由浏览器固定渲染在窗口顶部，页面无法控制位置，鼠标动线长。
+ * mfConfirm 用页面内模态框**居中**显示，样式与全站一致：
+ *   用法：if (await mfConfirm('确定？')) { ... }   ← 必须 await！
+ *   ⚠️ 不能当同步布尔用：Promise 恒为真值，会把「取消」吞掉、危险操作直接执行。
+ * 交互：Enter=确定 / Esc=取消 / 点遮罩=取消；防重复 resolve。
+ */
+window.mfConfirm = function (msg) {
+    function ensureStyle() {
+        if (document.getElementById('mfConfirmStyle')) return;
+        const st = document.createElement('style');
+        st.id = 'mfConfirmStyle';
+        st.textContent = `
+#mfConfirmMask{position:fixed;inset:0;z-index:99999;background:rgba(15,20,35,.45);display:flex;align-items:center;justify-content:center;}
+#mfConfirmBox{background:#fff;border-radius:14px;min-width:300px;max-width:88vw;padding:22px 24px 18px;
+  box-shadow:0 18px 50px rgba(0,0,0,.28);font-family:-apple-system,"PingFang SC",sans-serif;animation:mfconfirmIn .16s ease-out;}
+@keyframes mfconfirmIn{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+#mfConfirmBox .mfconfirm-msg{font-size:14px;line-height:1.7;color:#1c2433;white-space:pre-wrap;word-break:break-word;margin-bottom:18px;}
+#mfConfirmBox .mfconfirm-btns{display:flex;justify-content:flex-end;gap:10px;}
+#mfConfirmBox .mfconfirm-btn{border:none;border-radius:999px;padding:7px 20px;font-size:13px;font-weight:600;cursor:pointer;}
+#mfConfirmBox .mfconfirm-btn.cancel{background:#f0f2f8;color:#6b7280;}
+#mfConfirmBox .mfconfirm-btn.cancel:hover{background:#e2e6ef;}
+#mfConfirmBox .mfconfirm-btn.ok{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;}
+#mfConfirmBox .mfconfirm-btn.ok:hover{filter:brightness(1.06);}
+#mfConfirmBox .mfconfirm-btn.ok:focus-visible{outline:2px solid #8b5cf6;outline-offset:2px;}
+`;
+        document.head.appendChild(st);
+    }
+    // v4.30.81 防卡死加固 ①：开新框前先清掉任何残留/叠加的旧遮罩
+    // （连续快速点击会叠多个 mask，旧实现要逐个点掉才能恢复点击）
+    document.querySelectorAll('#mfConfirmMask').forEach(function (m) { m.remove(); });
+    return new Promise(function (resolve) {
+        ensureStyle();
+        let done = false;
+        const mask = document.createElement('div');
+        mask.id = 'mfConfirmMask';
+        const settle = function (v) {
+            if (done) return;
+            done = true;
+            document.removeEventListener('keydown', onKey, true);
+            mask.remove();
+            resolve(v);
+        };
+        const onKey = function (e) {
+            if (e.key === 'Escape') { e.stopPropagation(); settle(false); }
+            else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); settle(true); }
+        };
+        mask.innerHTML =
+            '<div id="mfConfirmBox" role="dialog" aria-modal="true">' +
+            '<div class="mfconfirm-msg"></div>' +
+            '<div class="mfconfirm-btns">' +
+            '<button type="button" class="mfconfirm-btn cancel">取消</button>' +
+            '<button type="button" class="mfconfirm-btn ok">确定</button>' +
+            '</div></div>';
+        // textContent 注入，天然防 XSS（消息里可能带歌名/用户输入）
+        mask.querySelector('.mfconfirm-msg').textContent = String(msg || '确定？');
+        mask.querySelector('.cancel').addEventListener('click', function () { settle(false); });
+        mask.querySelector('.ok').addEventListener('click', function () { settle(true); });
+        mask.addEventListener('mousedown', function (e) { if (e.target === mask) settle(false); });
+        document.addEventListener('keydown', onKey, true);
+        document.body.appendChild(mask);
+        try { mask.querySelector('.ok').focus(); } catch (e) {}
+    });
+};
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
+
+    /* ═══ v4.30.81 防卡死加固 ②：Esc 全局清扫（逃生门）═══
+     * 无论什么原因（叠加残留、异常中断、历史 bug），只要页面上还挂着
+     * mfConfirmMask / mfHelpMask 全屏遮罩，按一次 Esc 立即全部移除、恢复点击。
+     * 注册在捕获阶段，任何框内 Esc 逻辑之后仍会执行到（各框先 settle 自己）。
+     */
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        var stray = document.querySelectorAll('#mfConfirmMask, #mfHelpMask');
+        if (stray.length) stray.forEach(function (m) { m.remove(); });
+    }, true);
 })();

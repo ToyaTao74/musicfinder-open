@@ -1948,6 +1948,12 @@ def _row_to_task_status(row, err_rows, ne_total=0, ne_done=0, fully_resolved=Non
         remain = max(0, total - processed_for_pct)
         if speed > 0:
             eta = int(remain / speed * 60)  # 秒
+        # v4.30.78 修复「预计剩余 0秒」假象：主搜索全部跑完（remain=0）但任务还在
+        # 收尾阶段（各平台收藏量补齐/二次确认，finalized 未置位、finished_at 为空）
+        # 时，旧公式算出 eta=0，用户看到「0秒」却迟迟不结束。收尾耗时取决于平台
+        # 限流节奏（三平台卡片各有独立预估），顶层 ETA 如实返回 None → 前端显示「—」。
+        if remain <= 0 and not row['finished_at'] and row['status'] in ('running', 'pending'):
+            eta = None
     return {
         'id': row['id'],
         'name': row['name'],

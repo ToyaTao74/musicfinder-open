@@ -38,6 +38,16 @@
         .alias-tag{display:inline-flex;align-items:center;gap:6px;background:#f4f6ff;border:1px solid #e4e9fb;
           border-radius:999px;padding:3px 6px 3px 12px;margin:3px 4px 3px 0;font-size:12.5px;color:#3b4252;}
         .alias-date{white-space:nowrap;color:#9ca3af;font-size:12px;font-family:ui-monospace,Menlo,monospace;}
+        /* v4.30.82：候选多选工具条 */
+        .alias-sug-bar{display:flex;align-items:center;gap:12px;margin:8px 0 10px;padding:8px 12px;
+          background:#f8f9fd;border:1px solid #e8ebf5;border-radius:10px;font-size:13px;color:#3b4252;flex-wrap:wrap;}
+        .alias-sug-bar label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+        .alias-sug-bar .cnt{color:#6b7280;}
+        .alias-sug-bar .cnt b{color:#4f6ef7;}
+        .alias-sug-bar button:disabled{opacity:.45;cursor:not-allowed;}
+        .alias-sug-cb{width:15px;height:15px;cursor:pointer;accent-color:#4f6ef7;}
+        #aliasSugTable th:first-child,#aliasSugTable td:first-child{width:34px;text-align:center;}
+        .alias-row-checked{background:#f6f8ff;}
         `;
         document.head.appendChild(st);
     }
@@ -96,7 +106,7 @@
     }
 
     /* ── 渲染：已生效白名单（按添加日期从新到旧 v4.30.59；搜索过滤 v4.30.60）── */
-    let _aliasState = { aliases: {}, addedAt: {} };  // 最近一次接口数据，搜索时用它重渲染
+    let _aliasState = { aliases: {}, addedAt: {}, suggestions: [] };  // 最近一次接口数据，搜索时用它重渲染
     function aliasSearchQ() {
         const el = document.getElementById('aliasSearch');
         return ((el && el.value) || '').trim().toLowerCase();
@@ -147,34 +157,145 @@
                           ).join('')
                         : '<span class="alias-empty">（无）</span>') +
                     '</td><td>' + homeButtons(base) + '</td>' +
-                    '<td class="alias-date">' + (dt ? escapeHtml(dt.slice(0, 10)) : '—') + '</td></tr>';
+                    '<td class="alias-date">' + (dt ? escapeHtml(dt.slice(0, 10)) : '早期') + '</td></tr>';
             }).join('');
     }
 
-    /* ── 渲染：待确认候选 ── */
+    /* ── 渲染：待确认候选（v4.30.82 起支持多选批量操作）── */
+    const _sugSel = new Set();               // 已勾选的 key：base||alias
+    const sugKey = (s) => (s.base || '') + '||' + (s.alias || '');
+
+    function updateSugBar(sugList) {
+        const cnt = document.getElementById('aliasSugCount');
+        const bA = document.getElementById('aliasSugApprove');
+        const bD = document.getElementById('aliasSugDismiss');
+        const all = document.getElementById('aliasSugAll');
+        const n = _sugSel.size;
+        if (cnt) cnt.innerHTML = '已选 <b>' + n + '</b> 条';
+        if (bA) bA.disabled = !n;
+        if (bD) bD.disabled = !n;
+        if (all) {
+            const total = (sugList || []).length;
+            all.checked = total > 0 && n === total;
+            all.disabled = total === 0;
+        }
+    }
+
     function renderSuggestions(suggestions) {
         const tb = document.getElementById('aliasSugTable');
         if (!tb) return;
         const list = Array.isArray(suggestions) ? suggestions : Object.values(suggestions || {});
+        _aliasState.suggestions = list;
+        // 勾选集合只保留仍然存在的候选（接口刷新后已处理掉的自动剔除）
+        const alive = new Set(list.map(sugKey));
+        [..._sugSel].forEach(k => { if (!alive.has(k)) _sugSel.delete(k); });
         if (!list.length) {
+            _sugSel.clear();
             tb.innerHTML = '<tr><td class="alias-empty">暂无待确认候选——批量搜索发现「疑似改名」时会自动出现在这里</td></tr>';
+            updateSugBar(list);
             return;
         }
         tb.innerHTML = '<tr><th>基名（曲库/任务里写的）</th><th>疑似变体（平台上搜到的）</th><th>证据（命中的歌）</th><th>操作</th></tr>' +
             list.map(s => {
                 const base = s.base || '', alias = s.alias || '';
-                return '<tr><td><b>' + escapeHtml(base) + '</b></td><td>' + escapeHtml(alias) + '</td>' +
+                const checked = _sugSel.has(sugKey(s));
+                return '<tr' + (checked ? ' class="alias-row-checked"' : '') + '>' +
+                    '<td><b>' + escapeHtml(base) + '</b></td><td>' + escapeHtml(alias) + '</td>' +
                     '<td class="alias-evid">' + escapeHtml(s.song_name || '') + (s.ns ? '（匹配度 ' + s.ns + '%）' : '') + '</td>' +
                     '<td><span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+                    '<input type="checkbox" class="alias-sug-cb" data-key="' + escapeHtml(sugKey(s)) + '"' + (checked ? ' checked' : '') + ' title="勾选后可批量操作">' +
                     '<button type="button" class="alias-btn alias-btn-ok" data-act="approve" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✓ 加入白名单</button>' +
                     '<button type="button" class="alias-btn alias-btn-skip" data-act="dismiss" data-base="' + escapeHtml(base) + '" data-alias="' + escapeHtml(alias) + '">✕ 忽略</button>' +
                     homeButtons(alias) +
                     '</span></td></tr>';
             }).join('');
+        updateSugBar(list);
+    }
+
+    /* ── 批量操作（v4.30.82）── */
+    function selectedSugs() {
+        return (_aliasState.suggestions || []).filter(s => _sugSel.has(sugKey(s)));
+    }
+
+    async function batchRun(kind) {
+        const items = selectedSugs();
+        if (!items.length) return;
+        const bA = document.getElementById('aliasSugApprove');
+        const bD = document.getElementById('aliasSugDismiss');
+        const busyBtn = kind === 'approve' ? bA : bD;
+        bA.disabled = true; bD.disabled = true;
+        let ok = 0, fail = 0;
+        try {
+            for (let i = 0; i < items.length; i++) {
+                if (busyBtn) busyBtn.textContent = '提交中 ' + (i + 1) + '/' + items.length + '…';
+                try {
+                    if (kind === 'approve') await apiSend('POST', { base: items[i].base, alias: items[i].alias });
+                    else await apiDismiss({ base: items[i].base, alias: items[i].alias });
+                    ok++;
+                } catch (e) { fail++; }
+            }
+        } finally {
+            if (busyBtn) busyBtn.textContent = (kind === 'approve' ? '✓ 批量加入白名单' : '✕ 批量忽略');
+            _sugSel.clear();
+            try {
+                const d = await apiGet();
+                renderAll(d);
+            } catch (e) { /* 刷新失败保持现状 */ }
+        }
+        if (fail) alert('批量' + (kind === 'approve' ? '加入白名单' : '忽略') + '完成：成功 ' + ok + ' 条，失败 ' + fail + ' 条（可重试失败项）');
+    }
+
+    /* ── 多选工具条（注入到候选表格上方）── */
+    function ensureSugBar() {
+        const tb = document.getElementById('aliasSugTable');
+        if (!tb || document.getElementById('aliasSugBar')) return;
+        const host = tb.closest('.alias-card') || tb.parentElement;
+        const bar = document.createElement('div');
+        bar.id = 'aliasSugBar';
+        bar.className = 'alias-sug-bar';
+        bar.innerHTML =
+            '<label><input type="checkbox" id="aliasSugAll" class="alias-sug-cb"> 全选</label>' +
+            '<span class="cnt" id="aliasSugCount">已选 <b>0</b> 条</span>' +
+            '<span style="flex:1"></span>' +
+            '<button type="button" id="aliasSugApprove" class="alias-btn alias-btn-ok" disabled>✓ 批量加入白名单</button>' +
+            '<button type="button" id="aliasSugDismiss" class="alias-btn alias-btn-skip" disabled>✕ 批量忽略</button>';
+        host.insertBefore(bar, tb);
+        bar.addEventListener('change', (ev) => {
+            if (ev.target && ev.target.id === 'aliasSugAll') {
+                const list = _aliasState.suggestions || [];
+                if (ev.target.checked) list.forEach(s => _sugSel.add(sugKey(s)));
+                else _sugSel.clear();
+                renderSuggestions(list);   // 重渲染以同步行勾选态/高亮
+            }
+        });
+        bar.addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('button');
+            if (!btn || btn.disabled) return;
+            if (btn.id === 'aliasSugApprove') {
+                await batchRun('approve');          // 加入白名单是正向操作：不弹确认，一步到位
+            } else if (btn.id === 'aliasSugDismiss') {
+                const n = _sugSel.size;
+                if (!(await mfConfirm('忽略选中的 ' + n + ' 条候选？（忽略后不再提示）'))) return;
+                await batchRun('dismiss');
+            }
+        });
     }
 
     /* ── 事件委托：一个监听管所有表格按钮（approve/dismiss/home/del）── */
     function bindDelegation() {
+        // 候选表：行勾选（change 事件单独委托）
+        const sug = document.getElementById('aliasSugTable');
+        if (sug) {
+            sug.addEventListener('change', (ev) => {
+                const cb = ev.target.closest('input.alias-sug-cb');
+                if (!cb || !sug.contains(cb)) return;
+                if (cb.checked) _sugSel.add(cb.dataset.key);
+                else _sugSel.delete(cb.dataset.key);
+                const tr = cb.closest('tr');
+                if (tr) tr.classList.toggle('alias-row-checked', cb.checked);
+                updateSugBar(_aliasState.suggestions || []);
+            });
+        }
         ['aliasListTable', 'aliasSugTable'].forEach(tid => {
             const tb = document.getElementById(tid);
             if (!tb) return;
@@ -189,11 +310,11 @@
                         const d = await apiSend('POST', { base, alias });
                         renderAll(d);
                     } else if (act === 'dismiss') {
-                        if (!confirm('忽略该候选？（忽略后不再提示）')) return;
+                        if (!(await mfConfirm('忽略该候选？（忽略后不再提示）'))) return;
                         const d = await apiDismiss({ base, alias });
                         renderAll(d);
                     } else if (act === 'del') {
-                        if (!confirm('删除别名：' + base + ' ↔ ' + alias + ' ？')) return;
+                        if (!(await mfConfirm('删除别名：' + base + ' ↔ ' + alias + ' ？'))) return;
                         const d = await apiSend('DELETE', { base, alias });
                         renderAll(d);
                     } else if (act === 'home') {
@@ -261,6 +382,7 @@
         if (!document.getElementById('tab-alias')) return;
         ensureStyle();
         ensureSearchBox();
+        ensureSugBar();
         initAdd();
         bindDelegation();
         const tabBtn = document.querySelector('.tab-btn[data-tab="alias"]');

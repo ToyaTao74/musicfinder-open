@@ -7,16 +7,41 @@
 
 import json
 import os
+import re
+import ssl
 import tempfile
 import threading
+import time
 import traceback
+import urllib.request
 
 from flask import Blueprint, jsonify, request
 
 from . import db
 from . import importer as imp
+from . import sync_monitor as sync_m
 
 bp = Blueprint('monitor', __name__, url_prefix='/api/monitor')
+
+# ── v4.30.77 本地↔云端自动互通钩子 ──────────────────────
+# 读接口前惰性拉云端（5 分钟缓存，容错）；所有成功的 POST 自动触发推送
+# （3 秒去抖异步，不阻塞请求）。删除/确认/暂停/备注等全部写操作自动覆盖。
+@bp.before_request
+def _sync_pull_before():
+    try:
+        sync_m.maybe_pull()
+    except Exception:
+        pass
+
+
+@bp.after_request
+def _sync_touch_after(resp):
+    try:
+        if request.method == 'POST' and resp.status_code == 200:
+            sync_m.touch()
+    except Exception:
+        pass
+    return resp
 
 # ── 后台任务注册表（同一时刻同类型只允许一个）──────────
 _jobs = {}
@@ -286,7 +311,58 @@ def api_review_confirm():
                    payload['matched_name'], payload['matched_artist'],
                    payload['matched_album'], payload['score'],
                    db.REVIEW_CONFIRMED, db.now_str(), sp_id))
+
+    # v4.30.72：确认锁定后，库档案没词曲时用所选候选的平台词曲回填。
+    # 来源优先级：choice_index 指定的候选 > candidates 里 song_id 相同的那条。
+    cand_ly = cand_co = ''
+    try:
+        cands = json.loads(row['candidates'] or '[]')
+        src = None
+        if idx is not None:
+            src = cands[int(idx)] if 0 <= int(idx) < len(cands) else None
+        else:
+            src = next((x for x in cands if str(x.get('song_id', '')) == payload['song_id']), None)
+        if src:
+            cand_ly = str(src.get('lyricist') or '').strip()
+            cand_co = str(src.get('composer') or '').strip()
+    except Exception:
+        pass
+    if cand_ly or cand_co:
+        with db.tx() as c:
+            c.execute("""UPDATE song_archive SET lyricist=CASE WHEN lyricist='' THEN ? ELSE lyricist END,
+                         composer=CASE WHEN composer='' THEN ? ELSE composer END
+                         WHERE id=?""", (cand_ly, cand_co, row['archive_id']))
     return jsonify({'ok': True})
+
+
+@bp.route('/review/undo_confirm', methods=['POST'])
+def api_review_undo_confirm():
+    """撤销一次「锁定为正版」—— 清空该平台锁定并退回复核，同时后台重匹配。
+
+    用于误点卡片（点勾选框偏到卡片本体）后的快速恢复。
+    body: {sp_id}
+    """
+    body = request.get_json(silent=True) or {}
+    sp_id = body.get('sp_id')
+    if not sp_id:
+        return jsonify({'ok': False, 'error': '缺少 sp_id'}), 400
+    db.init_db()
+    conn = db.get_conn()
+    row = conn.execute('SELECT archive_id, platform FROM song_platform WHERE id=?',
+                       (sp_id,)).fetchone()
+    if not row:
+        return jsonify({'ok': False, 'error': '记录不存在'}), 404
+    with db.tx() as c:
+        c.execute("""UPDATE song_platform SET song_id='', url='', extra='',
+                     matched_name='', matched_artist='', matched_album='', score=0,
+                     confidence='none', review_status=?, candidates='', updated_at=?
+                     WHERE id=?""", (db.REVIEW_PENDING, db.now_str(), sp_id))
+        c.execute("UPDATE song_archive SET status='pending', updated_at=? WHERE id=?",
+                  (db.now_str(), row['archive_id']))
+    started = _kick_rematch([row['archive_id']], [row['platform']],
+                            skip_locked=False,
+                            label=f'撤销锁定 #{sp_id} → 重匹配')[0]
+    return jsonify({'ok': True, 'data': {'rematch_started': started}})
 
 
 @bp.route('/review/reject', methods=['POST'])
@@ -442,9 +518,14 @@ def api_review_delete():
     if not body.get('confirm'):
         return jsonify({'ok': True, 'data': {'confirmed': False, 'scope': scope, **preview}})
 
+    del_keys = [r['match_key'] for r in
+                conn.execute(f'SELECT match_key FROM song_archive WHERE id IN ({qmark})',
+                             ids).fetchall()]
     with db.tx() as c:
         # foreign_keys=ON + ON DELETE CASCADE：平台锁/指标/上榜/衍生版一并清掉
         c.execute(f'DELETE FROM song_archive WHERE id IN ({qmark})', ids)
+    if del_keys:
+        sync_m.record_deleted(del_keys)   # v4.30.77 同步墓碑，防另一端复活
     return jsonify({'ok': True, 'data': {'confirmed': True, 'deleted': len(ids),
                                          'scope': scope, **preview}})
 
@@ -459,6 +540,7 @@ def api_archive_list():
     conn = db.get_conn()
     kw = (request.args.get('q') or '').strip()
     lock = (request.args.get('lock') or '').strip()
+    sort = (request.args.get('sort') or '').strip()
     page = max(1, int(request.args.get('page', 1)))
     size = min(200, max(1, int(request.args.get('size', 10))))
     where, args = ['1=1'], []
@@ -474,15 +556,28 @@ def api_archive_list():
                    "WHERE review_status='pending_review')",
         'none': "id NOT IN (SELECT archive_id FROM song_platform "
                 "WHERE song_id!='' OR review_status='pending_review')",
+        'qq_none': "id NOT IN (SELECT archive_id FROM song_platform "
+                   "WHERE platform='qq' AND song_id!='')",
+        'kugou_none': "id NOT IN (SELECT archive_id FROM song_platform "
+                      "WHERE platform='kugou' AND song_id!='')",
+        'netease_none': "id NOT IN (SELECT archive_id FROM song_platform "
+                        "WHERE platform='netease' AND song_id!='')",
     }
     if lock in lock_sub:
         where.append(lock_sub[lock])
     w = ' AND '.join(where)
     total = conn.execute(f'SELECT COUNT(*) c FROM song_archive WHERE {w}',
                          args).fetchone()['c']
+    # 排序：默认按导入时间新→旧（方便看到最新加的歌）；created_asc 按旧→新
+    if sort == 'created_asc':
+        order = 'ORDER BY (created_at IS NULL), created_at ASC'
+    elif sort == 'id':
+        order = 'ORDER BY id'
+    else:
+        order = 'ORDER BY (created_at IS NULL), created_at DESC'
     rows = _rows(conn.execute(
         f'SELECT id, song_name, artist, lyricist, composer, album, genre, status, '
-        f'enabled, note FROM song_archive WHERE {w} ORDER BY id LIMIT ? OFFSET ?',
+        f'enabled, note, created_at FROM song_archive WHERE {w} {order} LIMIT ? OFFSET ?',
         args + [size, (page - 1) * size]))
     ids = [r['id'] for r in rows]
     if ids:
@@ -579,6 +674,11 @@ def api_archive_batch_lock():
         elif lock_val == 'none':
             where.append("""id IN (SELECT archive_id FROM song_platform
                                     WHERE (song_id='' OR song_id IS NULL))""")
+        elif lock_val.endswith('_none') and lock_val.split('_')[0] in ('qq', 'kugou', 'netease'):
+            plat = lock_val.split('_')[0]
+            where.append("""id NOT IN (SELECT archive_id FROM song_platform
+                                       WHERE platform=? AND song_id!='')""")
+            params.append(plat)
         # 空筛选 → 全库锁（按 song_platform 有 ID 的锁）
         sql_where = ' AND '.join(where)
         with db.tx() as c:
@@ -625,6 +725,186 @@ def api_archive_batch_lock():
     return jsonify({'ok': True, 'data': {'affected': n}})
 
 
+# ═══════════════════════════════════════════════════
+#  手动贴链接锁定（v4.30.49）：用户自己粘贴某平台歌曲链接
+#  系统自动识别平台 + 解析歌曲 ID，直接锁定为 ✅正版
+# ═══════════════════════════════════════════════════
+
+def _http_get_redirect(url, timeout=8):
+    """追 302 跳转，返回最终地址。失败返回 None（不抛异常）。"""
+    try:
+        ctx = ssl.create_default_context()
+        req = urllib.request.Request(url, method='GET', headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Referer': 'https://y.qq.com/'})
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+            return r.geturl()
+    except Exception:
+        return None
+
+
+def _kugou_chain_to_hash(url, timeout=10):
+    """酷狗分享短链（m.kugou.com/share/song.html?chain=xxx）→ 打开页面提取 hash。
+
+    酷狗 chain 短链没有 302 跳转，而是返回一个 JS 渲染页；
+    用桌面 UA 请求会得到 www.kugou.com/share/{chain}.html，
+    页面 dataFromSmarty 变量里直接暴露 hash。失败返回 None。
+    """
+    try:
+        ctx = ssl.create_default_context()
+        req = urllib.request.Request(url, method='GET', headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9'})
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as r:
+            body = r.read().decode('utf-8', errors='ignore')
+        m = re.search(r'"hash"\s*:\s*"([0-9a-fA-F]{8,})"', body)
+        if m:
+            return m.group(1).lower()
+    except Exception:
+        pass
+    return None
+
+
+def _qq_songid_to_mid(songid):
+    """QQ 旧版数字 songid → 现代 songmid（每日抓取认 songmid）。失败返回 None。"""
+    try:
+        api = ('https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg'
+               f'?songid={songid}&format=json&platform=yqq')
+        req = urllib.request.Request(api, headers={
+            'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode('utf-8'))
+        return data['data'][0]['mid']
+    except Exception:
+        return None
+
+
+def parse_platform_link(raw_url):
+    """解析用户粘贴的单平台歌曲链接。
+
+    返回 (platform, song_id, warn)：
+      platform: 'qq' / 'kugou' / 'netease' / None（识别不了）
+      song_id : 平台歌曲 ID（QQ=songmid / 酷狗=hash / 网易云=数字 id）
+      warn    : 解析时的提示（如短链跳转失败、数字 ID 未转成 mid）
+    识别不了时 platform=None，warn 给出人话原因。
+    """
+    if not raw_url:
+        return None, None, '链接为空'
+    url = raw_url.strip().strip('"').strip("'").strip()
+    if not url:
+        return None, None, '链接为空'
+    low = url.lower()
+
+    # ── 网易云 ──
+    if 'music.163.com' in low or '163.com' in low:
+        m = re.search(r'[?&/#]id=(\d+)', url)
+        if m:
+            return 'netease', m.group(1), None
+        return None, None, '网易云链接里没找到歌曲 id（应为 music.163.com/song?id=数字）'
+
+    # ── 酷狗 ──
+    if 'kugou.com' in low:
+        # 标准 hash 链接
+        m = re.search(r'hash=([0-9a-fA-F]{8,})', url)
+        if m:
+            return 'kugou', m.group(1).lower(), None
+        # 旧版数字 songid
+        m = re.search(r'[?&/#]songid=(\d+)', url) or re.search(r'/song/(\d+)', url)
+        if m:
+            return 'kugou', m.group(1), None
+        # 手机分享短链 m.kugou.com/share/song.html?chain=xxx → 打开页面取 hash
+        if 'chain=' in low:
+            h = _kugou_chain_to_hash(url)
+            if h:
+                return 'kugou', h, None
+            return None, None, '酷狗分享短链打开后没取到歌曲 hash，请换「复制链接」里的标准链接或网页版 hash 链接'
+        return None, None, '酷狗链接里没找到歌曲 hash（应为 kugou.com/song/#hash=...）'
+
+    # ── QQ音乐 ──
+    if 'qq.com' in low:
+        # 现代 songmid（网页版 / 分享页直链）
+        m = re.search(r'songmid=([A-Za-z0-9]+)', url) \
+            or re.search(r'/song/([A-Za-z0-9]+)\.html', url)
+        if m:
+            return 'qq', m.group(1), None
+
+        # songDetail/xxx 可能是现代 songmid，也可能是旧版数字 songid（短链跳转常见）
+        m = re.search(r'songDetail/([A-Za-z0-9]+)', url)
+        if m:
+            sid = m.group(1)
+            if sid.isdigit():
+                mid = _qq_songid_to_mid(sid)
+                if mid:
+                    return 'qq', mid, None
+                return 'qq', sid, 'QQ 链接里的歌曲 ID 是旧版数字，未能转成 songmid，已按数字 ID 锁定（指标抓取可能取不到，建议换网页版链接）'
+            return 'qq', sid, None
+
+        # 旧版数字 songid → 转 songmid
+        m = re.search(r'[?&/#]songid=(\d+)', url)
+        if m:
+            mid = _qq_songid_to_mid(m.group(1))
+            if mid:
+                return 'qq', mid, None
+            return 'qq', m.group(1), '未能把数字 songid 转成 songmid，已按数字 ID 锁定（QQ 指标抓取可能取不到，建议换网页版链接）'
+
+        # 手机分享短链 c(数字).y.qq.com/base/fcgi-bin/u?__=xxx → 追跳转拿真实地址
+        if re.search(r'c\d*\.y\.qq\.com', url) and 'fcgi-bin/u' in low:
+            real = _http_get_redirect(url)
+            if real and real != url:
+                return parse_platform_link(real)
+            return None, None, 'QQ 短链跳转失败，请直接粘贴网页版歌曲链接（地址栏 y.qq.com/n/ryqq/songDetail/...）'
+        return None, None, '没能从这条 QQ 链接里认出歌曲（请用网页版或分享页链接）'
+
+    return None, None, '认不出是哪个平台（目前只支持 QQ音乐 / 网易云 / 酷狗）'
+
+
+@bp.route('/platform/lock_url', methods=['POST'])
+def api_platform_lock_url():
+    """手动粘贴单平台歌曲链接，把这首档案歌锁定为该平台 ✅正版。
+
+    body: {archive_id: int, url: str}
+    系统自动识别平台 + 解析歌曲 ID，锁定为 confidence=high / review_status=confirmed。
+    不校验歌名是否一致（用户自己负责贴对），但会把档案本身的歌名/歌手回填到锁定信息，
+    方便列表徽章展示，也方便每日抓取按 song_id 取数。
+    """
+    body = request.get_json(silent=True) or {}
+    aid = body.get('archive_id')
+    url = (body.get('url') or '').strip()
+    if not aid or not url:
+        return jsonify({'ok': False, 'error': '缺少 archive_id 或 url'}), 400
+    db.init_db()
+    conn = db.get_conn()
+    arch = conn.execute(
+        'SELECT id, song_name, artist FROM song_archive WHERE id=?',
+        (int(aid),)).fetchone()
+    if not arch:
+        return jsonify({'ok': False, 'error': f'档案 id={aid} 不存在'}), 404
+
+    platform, song_id, warn = parse_platform_link(url)
+    if not platform or not song_id:
+        return jsonify({'ok': False, 'error': warn or '无法识别链接'}), 400
+
+    # 手动锁定：高把握 + 已确认（= ✅正版）；matched 名回填空档的档案歌名/歌手
+    db.upsert_platform(
+        int(aid), platform, song_id=song_id, url=url,
+        matched_name=arch['song_name'] or '', matched_artist=arch['artist'] or '',
+        confidence=db.CONF_HIGH, review_status=db.REVIEW_CONFIRMED)
+
+    return jsonify({
+        'ok': True,
+        'data': {
+            'platform': platform,
+            'platform_name': db.PLATFORM_NAMES.get(platform, platform),
+            'song_id': song_id,
+            'url': url,
+            'label': '已锁定(人工确认)',
+            'warn': warn,
+        }
+    })
+
+
 def _lock_filter_sql(lock_val):
     """把 lock 筛选翻成 SQL：以 song_platform 状态为准（与前端列表保持一致）。"""
     if lock_val == 'official':
@@ -636,6 +916,10 @@ def _lock_filter_sql(lock_val):
     if lock_val == 'none':
         return """id IN (SELECT archive_id FROM song_platform
                         WHERE (song_id='' OR song_id IS NULL))"""
+    if lock_val.endswith('_none') and lock_val.split('_')[0] in ('qq', 'kugou', 'netease'):
+        plat = lock_val.split('_')[0]
+        return f"""id NOT IN (SELECT archive_id FROM song_platform
+                              WHERE platform='{plat}' AND song_id!='')"""
     return '1=1'
 
 
@@ -741,6 +1025,304 @@ def api_report():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
     return jsonify({'ok': True, 'data': data})
+
+
+_RADAR_MUTE_FILE = os.path.expanduser('~/.musicfinder/chart_radar_mute.json')
+
+# ── v4.30.76：雷达屏蔽名单本地↔云端自动互通（同艺名白名单模式，CloudBase 共享库单文档）──
+_RADAR_MUTE_SYNC_KEY = 'shared_radar_mutes'
+# cleared_at=全清墓碑；tombstones={key: epoch}=单条删除墓碑（防止另一端旧数据把删除"复活"）
+_radar_mute_state = {'cleared_at': 0, 'tombstones': {}, 'cloud_ok': False}
+
+
+def _radar_added_ts(item):
+    """屏蔽条目 added_at（'%Y-%m-%d %H:%M'）→ 时间戳；解析失败给 0（视作最早，会被墓碑清掉）。"""
+    s = (item.get('added_at') or '').strip()
+    try:
+        return time.mktime(time.strptime(s, '%Y-%m-%d %H:%M'))
+    except Exception:
+        return 0.0
+
+
+def _pull_radar_mutes_from_cloud():
+    """拉云端共享屏蔽文档（5 分钟缓存）。无文档返回 None；网络/配置失败也返回 None。"""
+    now = time.time()
+    if _radar_mute_state['cloud_ok'] and now - _radar_mute_state.get('pull_t', 0) < 300:
+        return _radar_mute_state.get('pull_data')
+    try:
+        from app import _cloudbase_cfg, _cloudbase_call   # 延迟导入，防循环依赖
+        cb = _cloudbase_cfg()
+        if not cb:
+            return None
+        rows = _cloudbase_call(cb, 'get_all') or []
+        for it in rows:
+            d1 = it.get('data') or {}
+            if d1.get('mark_key') != _RADAR_MUTE_SYNC_KEY:
+                continue
+            d2 = d1.get('data') or {}
+            mutes = d2.get('mutes')
+            if isinstance(mutes, list):
+                cloud_cleared = float(d2.get('cleared_at') or 0)
+                cloud_tombs = d2.get('tombstones') if isinstance(d2.get('tombstones'), dict) else {}
+                _radar_mute_state['cleared_at'] = max(cloud_cleared, _radar_mute_state['cleared_at'])
+                for k, v in cloud_tombs.items():
+                    old = _radar_mute_state['tombstones'].get(k, 0)
+                    _radar_mute_state['tombstones'][k] = max(float(v or 0), old)
+                pack = {'mutes': mutes, 'cleared_at': cloud_cleared}
+                _radar_mute_state.update(pull_data=pack, pull_t=now, cloud_ok=True)
+                return pack
+        _radar_mute_state.update(pull_data=None, pull_t=now, cloud_ok=True)
+        return None
+    except Exception as e:
+        print('[radar_mute] 云端拉取失败（容错走本地）:', e)
+        return None
+
+
+def _push_radar_mutes_to_cloud(items):
+    """把合并后的屏蔽名单（含全清墓碑+单条删除墓碑）推上云端共享库。失败静默（本地文件仍是真相兜底）。"""
+    try:
+        from app import _cloudbase_cfg, _cloudbase_call
+        cb = _cloudbase_cfg()
+        if not cb:
+            return False
+        payload = [{
+            'datatype': 'radar_mute_sync',
+            'mark_key': _RADAR_MUTE_SYNC_KEY,
+            'username': 'legacy',
+            'song_name': '[系统] 雷达屏蔽同步',
+            'note': '',
+            'data': {'mutes': items, 'cleared_at': _radar_mute_state['cleared_at'],
+                     'tombstones': _radar_mute_state['tombstones'],
+                     'updated_at': time.time()},
+        }]
+        _cloudbase_call(cb, 'batch_upsert', payloads=payload)
+        _radar_mute_state.update(pull_data={'mutes': items, 'cleared_at': _radar_mute_state['cleared_at']},
+                                 pull_t=time.time(), cloud_ok=True)
+        return True
+    except Exception as e:
+        print('[radar_mute] 推送云端失败（容错走本地）:', e)
+        return False
+
+
+def _radar_tomb_alive(key, item):
+    """条目是否未被删除墓碑压制（added_at 晚于墓碑时间 = 删除后又重新添加）。"""
+    tb = _radar_mute_state['tombstones'].get(key)
+    return tb is None or _radar_added_ts(item) > float(tb)
+
+
+def _load_radar_mutes():
+    """本地文件 + 云端共享 双向合并：按 key 去重、added_at 新者胜、
+    全清墓碑(cleared_at)之前的条目与单条删除墓碑(tombstones)压制的条目丢弃。
+    合并结果若与本地文件不同 → 落盘并推云（首次还会把本地名单 seed 上云）。"""
+    local = []
+    if os.path.exists(_RADAR_MUTE_FILE):
+        try:
+            with open(_RADAR_MUTE_FILE, encoding='utf-8') as f:
+                local = json.load(f) or []
+        except Exception:
+            local = []
+    if not isinstance(local, list):
+        local = []
+    cloud_pack = _pull_radar_mutes_from_cloud()
+    if cloud_pack is None:
+        if local and not _radar_mute_state.get('seed_tried'):
+            _radar_mute_state['seed_tried'] = True
+            _push_radar_mutes_to_cloud(local)   # 首次：本地名单 seed 上云
+        return local
+    cleared_at = float(cloud_pack.get('cleared_at') or 0)
+    by_key = {}
+    for x in local:
+        if isinstance(x, dict) and x.get('key') and _radar_added_ts(x) > cleared_at \
+                and _radar_tomb_alive(x['key'], x):
+            by_key[x['key']] = x
+    for x in cloud_pack.get('mutes') or []:
+        if not (isinstance(x, dict) and x.get('key')) or not _radar_tomb_alive(x['key'], x):
+            continue
+        old = by_key.get(x['key'])
+        if old is None or (x.get('added_at') or '') > (old.get('added_at') or ''):
+            by_key[x['key']] = x
+    merged = sorted(by_key.values(), key=lambda x: x.get('added_at') or '', reverse=True)
+    local_keys = {x.get('key') for x in local if isinstance(x, dict)}
+    if {x['key'] for x in merged} != local_keys or cleared_at > _radar_mute_state['cleared_at']:
+        _save_radar_mutes(merged)   # 合并有变化：落盘 + 推云
+    return merged
+
+
+def _radar_norm(s):
+    """歌名归一化：小写 + 去括号内容（Live/Remix 等版本后缀）+ 去空白与常见标点。"""
+    s = (s or '').lower()
+    s = re.sub(r'[（(【\[].*?[)）】\]]', '', s)
+    s = re.sub(r'[\s\'"’“”·、，,。.\-—_～~!！?？]', '', s)
+    return s
+
+
+def _save_radar_mutes(items):
+    os.makedirs(os.path.dirname(_RADAR_MUTE_FILE), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(suffix='.json', dir=os.path.dirname(_RADAR_MUTE_FILE))
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(items, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, _RADAR_MUTE_FILE)          # 原子写，杜绝截断损坏
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except Exception:
+            pass
+        raise
+    threading.Thread(target=_push_radar_mutes_to_cloud, args=(items,), daemon=True).start()
+
+
+@bp.route('/report/radar_mutes', methods=['GET', 'POST', 'DELETE'])
+def api_report_radar_mutes():
+    """同名/相似雷达的屏蔽名单（歌曲维度：歌名+榜单歌手，与监测库无关，不影响未来新增监测）。"""
+    if request.method == 'GET':
+        return jsonify({'ok': True, 'items': _load_radar_mutes()})
+    items = _load_radar_mutes()
+    if request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        song = (body.get('song_name') or '').strip()
+        artist = (body.get('artist') or '').strip()
+        if not song:
+            return jsonify({'ok': False, 'error': '缺少歌名'}), 400
+        from datetime import datetime
+        key = _radar_norm(song) + '|' + _radar_norm(artist)
+        if not any(x['key'] == key for x in items):
+            _radar_mute_state['tombstones'].pop(key, None)   # 重新屏蔽：清掉旧删除墓碑
+            items.insert(0, {'key': key, 'song_name': song, 'artist': artist,
+                             'added_at': datetime.now().strftime('%Y-%m-%d %H:%M')})
+            _save_radar_mutes(items)
+        return jsonify({'ok': True, 'items': items, 'total': len(items)})
+    # DELETE
+    key = (request.args.get('key') or '').strip()
+    if request.args.get('all') == '1':
+        _radar_mute_state['cleared_at'] = time.time()   # 全清墓碑：另一端此前的条目一并作废
+        _save_radar_mutes([])
+        return jsonify({'ok': True, 'items': [], 'total': 0})
+    _radar_mute_state['tombstones'][key] = time.time()   # 单条删除墓碑：阻断另一端旧数据复活
+    items = [x for x in items if x['key'] != key]
+    _save_radar_mutes(items)
+    return jsonify({'ok': True, 'items': items, 'total': len(items)})
+
+
+_BOARD_CACHE = {'key': None, 'data': None}
+
+
+@bp.route('/report/chart_board', methods=['GET'])
+def api_report_chart_board():
+    """实时榜单固定展示：6 榜中只展示与监测歌曲相关的条目——
+    ① 精确监控命中（歌名+歌手都对）② 同名不同歌手（疑似翻唱/盗版线索）③ 相似歌名（≥85% 或互为包含）。
+    当天无命中也返回空态卡片。"""
+    import re
+    from difflib import SequenceMatcher
+    BOARDS = [
+        ('qq', 'qq_hot'), ('qq', 'qq_soar'),
+        ('kugou', 'kg_top500'), ('kugou', 'kg_soar'),
+        ('netease', 'netease_hot'), ('netease', 'netease_soar'),
+    ]
+    db.init_db()
+    conn = db.get_conn()
+
+    # 监测歌名索引：归一化歌名 -> [(原名, 歌手)]；2-gram 倒排供相似匹配筛候选
+    mon_map = {}
+    for r in conn.execute('SELECT song_name, artist FROM song_archive WHERE enabled=1'):
+        k = _radar_norm(r['song_name'])
+        if k:
+            mon_map.setdefault(k, []).append((r['song_name'], (r['artist'] or '').strip()))
+    grams = {}
+    for k in mon_map:
+        for i in range(len(k) - 1):
+            grams.setdefault(k[i:i + 2], set()).add(k)
+
+    mute_items = _load_radar_mutes()
+    mute_keys = {x['key'] for x in mute_items}
+
+    def _match(rows):
+        out, seen = [], set()
+        for r in rows:
+            it_norm = _radar_norm(r['song_name'])
+            if not it_norm:
+                continue
+            if it_norm in mon_map:                      # ① 精确同名（歌手可不同）
+                for name, artist in mon_map[it_norm]:
+                    if (r['rank'], name) in seen:
+                        continue
+                    seen.add((r['rank'], name))
+                    same_artist = bool(artist) and (r['artist'] or '').strip() == artist
+                    out.append({'rank': r['rank'], 'song_name': r['song_name'], 'artist': r['artist'] or '',
+                                'kind': 'exact' if same_artist else 'same_name',
+                                'matched_to': name, 'matched_artist': artist, 'sim': 1.0})
+                continue
+            cands = set()                               # ② 相似：2-gram 倒排筛候选再精算
+            for i in range(len(it_norm) - 1):
+                cands |= grams.get(it_norm[i:i + 2], set())
+            best = None
+            for ck in cands:
+                if abs(len(ck) - len(it_norm)) > 3:
+                    continue
+                # 包含匹配：较短一方须 ≥4 字（《红色》⊂《红色高跟鞋》这类短名包含必是误报）
+                m, M = (ck, it_norm) if len(ck) <= len(it_norm) else (it_norm, ck)
+                cover = len(m) / len(M) if len(M) else 0
+                contained = len(m) >= 4 and m in M and cover >= 0.6
+                ratio = SequenceMatcher(None, it_norm, ck).ratio()
+                if (contained or ratio >= 0.85) and (not best or ratio > best[1]):
+                    best = (ck, ratio if ratio >= 0.85 else cover)
+            if best:
+                for name, artist in mon_map[best[0]]:
+                    out.append({'rank': r['rank'], 'song_name': r['song_name'], 'artist': r['artist'] or '',
+                                'kind': 'similar', 'matched_to': name, 'matched_artist': artist,
+                                'sim': round(best[1], 2)})
+        out.sort(key=lambda x: x['rank'])
+        return out[:30]
+
+    heads = [conn.execute(
+        'SELECT chart_name, MAX(stat_date) AS d FROM chart_snapshot WHERE platform=? AND chart_id=?',
+        (p, c)).fetchone() for p, c in BOARDS]
+    # mon_n 纳入缓存键：往名单加歌后立即失效缓存，雷达当场重算（新歌变 exact 被滤出、进「我司歌曲上榜」）
+    mon_n = conn.execute('SELECT COUNT(*) FROM song_archive WHERE enabled=1').fetchone()[0]
+    cache_key = '|'.join(f'{p}:{c}:{h["d"] if h else ""}' for (p, c), h in zip(BOARDS, heads)) + f'|m{len(mute_items)}|n{mon_n}'
+    if _BOARD_CACHE['key'] == cache_key and _BOARD_CACHE['data'] is not None:
+        return jsonify({'ok': True, 'boards': _BOARD_CACHE['data'], 'muted_total': len(mute_items)})
+
+    boards = []
+    for (platform, cid), head in zip(BOARDS, heads):
+        b = {'platform': platform, 'chart_id': cid,
+             'chart_name': (head['chart_name'] if head else '') or cid,
+             'stat_date': head['d'] if head else None, 'items': [], 'total': 0}
+        if head and head['d']:
+            b['total'] = conn.execute(
+                'SELECT COUNT(*) FROM chart_snapshot WHERE platform=? AND chart_id=? AND stat_date=?',
+                (platform, cid, head['d'])).fetchone()[0]
+            rows = conn.execute(
+                'SELECT rank, song_name, artist FROM chart_snapshot '
+                'WHERE platform=? AND chart_id=? AND stat_date=? ORDER BY rank ASC',
+                (platform, cid, head['d'])).fetchall()
+            # exact（歌名+歌手全对）在「我司歌曲上榜」板块已权威展示；屏蔽名单按歌曲维度过滤
+            b['items'] = [x for x in _match(rows)
+                          if x['kind'] != 'exact'
+                          and (_radar_norm(x['song_name']) + '|' + _radar_norm(x['artist'])) not in mute_keys]
+        boards.append(b)
+    _BOARD_CACHE['key'] = cache_key
+    _BOARD_CACHE['data'] = boards
+    return jsonify({'ok': True, 'boards': boards, 'muted_total': len(mute_items)})
+
+
+@bp.route('/report/chart_export', methods=['GET'])
+def api_report_chart_export():
+    """榜单上榜播报导出 xlsx（上榜歌曲 / 冲榜动态 / 榜单纪录 三个 sheet）。"""
+    from io import BytesIO
+    from flask import send_file
+    period = request.args.get('period', 'day')
+    stat_date = request.args.get('stat_date') or None
+    db.init_db()
+    try:
+        from . import report
+        data = report.get_report(period=period, stat_date=stat_date)
+        buf = report.build_chart_xlsx(data)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    fname = f"榜单上榜播报_{data.get('start_date', '')}_{data.get('end_date', '')}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=fname,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 @bp.route('/report/artist_songs', methods=['GET'])
@@ -884,9 +1466,14 @@ def api_archive_delete():
     if not body.get('confirm'):
         return jsonify({'ok': True, 'data': {'confirmed': False, **preview}})
 
+    del_keys2 = [r['match_key'] for r in
+                 conn.execute(f'SELECT match_key FROM song_archive WHERE id IN ({qmark})',
+                              ids).fetchall()]
     with db.tx() as c:
         # foreign_keys=ON + ON DELETE CASCADE：平台锁/指标/上榜/衍生版一并清掉
         c.execute(f'DELETE FROM song_archive WHERE id IN ({qmark})', ids)
+    if del_keys2:
+        sync_m.record_deleted(del_keys2)   # v4.30.77 同步墓碑，防另一端复活
     return jsonify({'ok': True, 'data': {'confirmed': True, 'deleted': len(ids),
                                          **preview}})
 
@@ -1029,9 +1616,11 @@ def api_platform_unlock():
     db.init_db()
     with db.tx() as c:
         for p in targets:
+            # candidates 一并清空：解锁 = 推翻上次匹配结果，旧候选（可能含伴奏等
+            # 已被新规则剔除的条目）不该再出现在复核列表里误导人工选择
             c.execute("""UPDATE song_platform SET song_id='', url='', extra='',
                          matched_name='', matched_artist='', matched_album='', score=0,
-                         confidence='none', review_status=?, updated_at=?
+                         confidence='none', review_status=?, candidates='', updated_at=?
                          WHERE archive_id=? AND platform=?""",
                       (db.REVIEW_PENDING, db.now_str(), aid, p))
         c.execute("UPDATE song_archive SET status='pending', updated_at=? WHERE id=?",
@@ -1241,4 +1830,6 @@ def api_archive_export():
 def register(app):
     """在主程序里调用：monitor.routes.register(app)"""
     app.register_blueprint(bp)
+    # v4.30.77 启动本地↔云端互通后台线程（seed 判定 + 周期 push/pull）
+    sync_m.start_background()
     return bp

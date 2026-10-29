@@ -10,9 +10,9 @@
 # ════════════════════════════════════════════════════════════════════════════
 # 版本号 — 单一权威来源，所有前后端展示从这里取
 # ════════════════════════════════════════════════════════════════════════════
-APP_VERSION        = '4.30.61'
-_BUILD_STAMP        = '20261020.01'  # v4.30.61：证据监测台三指示灯补回云端（/agent_status 代理 Agent 网关 + 前端指示灯条）。今日 STG 同步时 evidence 三件套缺 P3 改动导致云端丢失该功能，本次补齐——云端与本地 10-15 部署的 P3 代码重新一致。
-APP_VERSION_NAME   = 'v4.30.61 证据台三指示灯补回云端'
+APP_VERSION        = '4.30.85'
+_BUILD_STAMP        = '20261028.07'  # v4.30.85：三平台实收率卡「已查找」改为真实口径（总数-该平台待确认），旧版搜索阶段就显示 810/810 误导用户  # v4.30.84：批量上传文本框往返无损（songsToText 引号转义+内嵌换行折叠，parseSongs 引号感知解析），修复 808/815 计数虚增
+APP_VERSION_NAME   = 'v4.30.85 平台卡已查找真实口径'
 APP_VERSION_DATE   = '2026-10-20'
 # _APP_START_TS 在 main() 第一行设置（避免在此 global 声明失败）
 
@@ -109,7 +109,10 @@ def _init_data_from_snapshot():
             return
         for fn in ('batch_v2.db', 'monitor.db', 'evidence.db',
                    'performer_alias_suggestions.json', 'merge_map.json',
-                   'douyin_state.json', '.secret'):
+                   'douyin_state.json',
+                   'performer_aliases.json', 'performer_aliases_ts.json',  # v4.30.74：别名白名单+添加时间
+                   'chart_radar_mute.json',  # v4.30.75：雷达屏蔽名单
+                   '.secret'):
             dst = os.path.join(COOKIE_DIR, fn)
             src = os.path.join(snap_dir, fn)
             if os.path.exists(src) and not os.path.exists(dst):
@@ -1058,6 +1061,8 @@ def _user_stats(username):
 _SNAPSHOT_EXPORT_FILES = (
     'batch_v2.db', 'monitor.db', 'evidence.db',
     'performer_alias_suggestions.json', 'merge_map.json', 'douyin_state.json',
+    'performer_aliases.json', 'performer_aliases_ts.json',   # v4.30.74：别名白名单+添加时间随快照部署
+    'chart_radar_mute.json',   # v4.30.75：雷达屏蔽名单随快照部署（否则每次部署云端屏蔽清零）
     '.secret',   # v4.30.35：会话签名密钥——不随部署刷新，用户登录态跨版本不失效
 )
 

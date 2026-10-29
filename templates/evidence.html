@@ -20,6 +20,7 @@
     <span class="ev-led off" id="ledChrome"><i></i>Chrome 连接</span>
     <span class="ev-led off" id="ledLogin"><i></i>抖音登录态</span>
     <span class="ev-agent-tip" id="evAgentTip">检测中…</span>
+    <button class="ev-agent-cfg" id="evAgentCfgBtn" type="button">⚙️ 本地助手配置</button>
   </div>
   <style>
     .ev-agent-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 4px;padding:8px 12px;
@@ -29,7 +30,49 @@
     .ev-led.on{color:#1f9d55}.ev-led.on i{background:#1f9d55;box-shadow:0 0 0 3px rgba(31,157,85,.15)}
     .ev-led.off i{background:#e0564f;box-shadow:0 0 0 3px rgba(224,86,79,.12)}
     .ev-agent-tip{color:#6b7280;margin-left:auto}
+    .ev-agent-cfg{padding:4px 12px;border:1px solid #c9d2de;background:#fff;border-radius:8px;font-size:12px;
+      color:#334155;cursor:pointer}
+    .ev-agent-cfg:hover{background:#eef2f7}
+    .ev-helper-row{display:flex;align-items:center;gap:10px;margin:10px 0;flex-wrap:wrap}
+    .ev-helper-state{font-size:13px;font-weight:600}
+    .ev-helper-state.ok{color:#1f9d55}.ev-helper-state.bad{color:#e0564f}
+    .ev-helper-btn{padding:7px 16px;border:none;border-radius:8px;font-size:13px;cursor:pointer;
+      background:#3b82f6;color:#fff}
+    .ev-helper-btn:disabled{background:#a8c3e8;cursor:not-allowed}
+    .ev-helper-btn.green{background:#16a34a}
+    .ev-helper-note{font-size:12px;color:#6b7280;line-height:1.7;margin:8px 0 0}
+    .ev-helper-dl{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+    .ev-helper-dl a{font-size:13px;color:#2563eb;text-decoration:none;border:1px solid #bfdbfe;
+      background:#eff6ff;padding:6px 14px;border-radius:8px}
+    .ev-helper-dl a:hover{background:#dbeafe}
   </style>
+
+  {# 本地助手配置弹窗（v4.30.64）：状态自检 / 一键扫码 / 下载安装包 #}
+  <div class="ev-modal" id="evHelperModal" hidden role="dialog" aria-labelledby="evHelperTitle">
+    <div class="ev-modal-card">
+      <div class="ev-modal-head">
+        <h3 id="evHelperTitle">⚙️ 本地助手配置</h3>
+        <button class="ev-modal-x" id="evHelperClose" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="ev-modal-body">
+        <div class="ev-helper-row">
+          <span class="ev-helper-state" id="evHelperState">正在检测本机助手…</span>
+        </div>
+        <div class="ev-helper-row">
+          <button class="ev-helper-btn green" id="evHelperScan" type="button">📱 一键打开抖音扫码窗口</button>
+          <span class="ev-helper-note" id="evHelperScanNote"></span>
+        </div>
+        <p class="ev-helper-note">手机抖音扫码一次即可，登录状态长期保存在本机，之后自动复用、无需重复扫码。</p>
+        <p class="ev-helper-note"><b>第一次在这台电脑使用？</b>下载对应安装包，解压后双击里面的安装脚本一次即可，
+          之后助手会开机自动运行，无需再手动启动：</p>
+        <div class="ev-helper-dl">
+          <a href="/static/agent-setup-win.zip" download>⬇️ Windows 安装包</a>
+          <a href="/static/agent-setup-mac.zip" download>⬇️ Mac 安装包</a>
+        </div>
+        <p class="ev-helper-note" id="evHelperDiag"></p>
+      </div>
+    </div>
+  </div>
 
   <div class="ev-stat-grid" id="evStats"></div>
 

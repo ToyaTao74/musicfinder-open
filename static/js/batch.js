@@ -104,11 +104,34 @@
         inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); });
     }
 
+    // v4.30.84：带引号感知的字段分割 —— 单元格内含逗号/顿号/换行的歌名（如「下一站，翻身」「婉夏（Gentle summer）」）
+    // 不再被拆成多列/多行。songsToText 写入时对特殊字段加 "..." 包裹，parseSongs 解析时优先按引号成对还原。
+    function splitCsvLine(line) {
+        const parts = [];
+        let cur = '';
+        let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (inQ) {
+                if (ch === '"') {
+                    if (line[i + 1] === '"') { cur += '"'; i++; }  // "" → 字面引号
+                    else inQ = false;
+                } else cur += ch;
+            } else if (ch === '"') {
+                inQ = true;
+            } else if (/[,，\t、]/.test(ch)) {
+                parts.push(cur.trim()); cur = '';
+            } else cur += ch;
+        }
+        parts.push(cur.trim());
+        return parts.filter(Boolean);
+    }
+
     function parseSongs(text) {
         const lines = (text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-        // 分段：优先逗号/制表符/中文逗号/顿号；单段再试空白
+        // 分段：优先逗号/制表符/中文逗号/顿号（引号内不算分隔符）；单段再试空白
         const splitLine = (line) => {
-            let parts = line.split(/[,，\t、]/).map(s => s.trim()).filter(Boolean);
+            let parts = splitCsvLine(line);
             if (parts.length <= 1) parts = line.split(/\s+/).map(s => s.trim()).filter(Boolean);
             return parts;
         };
@@ -214,9 +237,20 @@
     }
 
     // ── 文件上传：解析 Excel / Word 为歌单并填充输入框 ──
+    // v4.30.84：字段级清洗 —— ① 单元格内嵌换行（如「婉夏（Gentle\nsummer\n）」）折叠为空格，
+    // 否则文本框按行计数会虚增（808 变 815）；② 含逗号/顿号/制表符/引号的字段用 "..." 包裹，
+    // parseSongs 侧引号感知解析可无损还原，文本框往返不再失真。
+    function csvField(v) {
+        let s = String(v == null ? '' : v).replace(/\s*\r?\n+\s*/g, ' ').replace(/ {2,}/g, ' ').trim();
+        // 全角标点旁不留空格（「Gentle summer ）」→「Gentle summer）」）
+        s = s.replace(/ ([）】」』、，。！？])/g, '$1').replace(/([（【「『]) /g, '$1');
+        if (/["\r\n,，\t、]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+        return s;
+    }
+
     function songsToText(songs) {
         return songs.map(s => {
-            const parts = [s.song_name, s.performer || '', s.lyricist || '', s.composer || ''];
+            const parts = [s.song_name, s.performer || '', s.lyricist || '', s.composer || ''].map(csvField);
             while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
             return parts.join(',');
         }).join('\n');
@@ -411,7 +445,8 @@
     // v4.27.7 实时追加：上次拉到的最大 idx（增量拉取用）+ 已渲染行数（性能控制）
     let v2LastMaxIdx = -1;
     let v2TotalRendered = 0;
-    const V2_MAX_RENDER_ROWS = 500;  // 表格最多渲染 500 行防卡；超了提示去 Excel
+    let v2RenderCap = 500;           // 表格初始最多渲染 500 行防卡；超出部分点「继续显示」按需放开（v4.30.83）
+    const V2_RENDER_CHUNK = 500;     // 每次「继续显示」追加的行数
 
     async function runV2Batch(songs) {
         runBtn.disabled = true;
@@ -471,6 +506,7 @@
         // v4.27.7：实时结果表格重置
         v2LastMaxIdx = -1;
         v2TotalRendered = 0;
+        v2RenderCap = 500;
         if (v2RecentBody) {
             v2RecentBody.innerHTML = '<tr><td colspan="7" class="v2-recent-empty">worker 一首歌搞定后会自动追加到这里…</td></tr>';
         }
@@ -509,35 +545,64 @@
     /** 增量拉取已完成结果，追加到 v2RecentBody 末尾 */
     async function pollV2Results(curStatus) {
         if (!v2CurrentTaskId) return;
-        // 已超过渲染上限就不再追加（避免 2283 行的 DOM 节点让浏览器卡）
-        if (v2TotalRendered >= V2_MAX_RENDER_ROWS) return;
-        const limit = V2_MAX_RENDER_ROWS - v2TotalRendered;
+        const atCap = v2TotalRendered >= v2RenderCap;
+        // 到渲染上限后不再追加行（避免几千行 DOM 卡浏览器），但仍拉一次轻量结果拿计数
+        // （limit=1 只是让服务端返回 done/total 计数，返回的行不用）
+        const limit = atCap ? 1 : (v2RenderCap - v2TotalRendered);
         try {
             const resp = await fetch('/api/batch_v2_results/' + v2CurrentTaskId + '?since_idx=' + v2LastMaxIdx + '&limit=' + limit);
             if (!resp.ok) return;
             const data = await resp.json();
-            if (data.rows && data.rows.length) {
+            if (!atCap && data.rows && data.rows.length) {
                 appendResultRows(data.rows);
-                if (data.max_idx > v2LastMaxIdx) v2LastMaxIdx = data.max_idx;
+                // v4.30.78 修复「表格只显示最早完成的几行」：游标只能前进到**本次返回行**
+                // 的最大 idx。旧代码用 data.max_idx（= 全表 MAX(idx)，含还没跑完的行），
+                // 第一个 tick 就把游标跳到末尾（如 293），之后才完成的行 idx≤293 永远
+                // 拉不回来 → 表格冻结在最初 2 行、而头部计数照常涨到 293。
+                const rowsMax = data.rows.reduce((mx, r) => Math.max(mx, (r.idx != null ? r.idx : 0)), v2LastMaxIdx);
+                if (rowsMax > v2LastMaxIdx) v2LastMaxIdx = rowsMax;
             }
-            // 全量计数（无视表格只显示 500 行）：让用户知道总共查到了多少首
+            // v4.30.83 修复「任务 820 首、已识别却显示 500 首」：旧逻辑一到 500 行就整体
+            // return，连计数也不更新 → 头部数字冻在 500。现在计数无论是否到上限都如实更新。
             const done = data.done || 0;
             if (v2RecentCount) v2RecentCount.textContent = String(done);
-            // 已到上限 + 还有剩余：显示底部提示
+            ensureLoadMoreBtn();
+            const loadBtn = document.getElementById('v2LoadMoreBtn');
+            const hasMore = done > v2TotalRendered;
+            const hitCap = v2TotalRendered >= v2RenderCap;
             if (v2RecentFoot) {
-                const hitCap = v2TotalRendered >= V2_MAX_RENDER_ROWS;
-                const hasMore = done > v2TotalRendered;
                 if (hitCap && hasMore) {
                     v2RecentFoot.hidden = false;
-                    if (v2RecentFootText) v2RecentFootText.textContent = `表格已显示前 ${V2_MAX_RENDER_ROWS} 首（共 ${done} 首），其余请下载 Excel 查看`;
-                } else if (hasMore === false && done > 0) {
+                    if (v2RecentFootText) v2RecentFootText.textContent = `表格已显示前 ${v2TotalRendered} 首（共 ${done} 首）`;
+                    if (loadBtn) {
+                        loadBtn.hidden = false;
+                        loadBtn.textContent = `⬇️ 继续显示剩余 ${done - v2TotalRendered} 首`;
+                    }
+                } else if (done > 0 && !hasMore) {
                     v2RecentFoot.hidden = false;
                     if (v2RecentFootText) v2RecentFootText.textContent = `✅ 共 ${done} 首已全部显示在表格里`;
+                    if (loadBtn) loadBtn.hidden = true;
                 } else {
                     v2RecentFoot.hidden = true;
+                    if (loadBtn) loadBtn.hidden = true;
                 }
             }
         } catch (e) { /* 静默 */ }
+    }
+
+    /** 底部「继续显示」按钮（一次创建，v4.30.83）：点一次再放开 500 行 */
+    function ensureLoadMoreBtn() {
+        if (!v2RecentFoot || document.getElementById('v2LoadMoreBtn')) return;
+        const b = document.createElement('button');
+        b.id = 'v2LoadMoreBtn';
+        b.type = 'button';
+        b.className = 'link-btn';
+        b.hidden = true;
+        b.addEventListener('click', function () {
+            v2RenderCap += V2_RENDER_CHUNK;
+            pollV2Tick();
+        });
+        v2RecentFoot.insertBefore(b, v2RecentFoot.firstChild);
     }
 
     function renderV2Status(s) {
@@ -732,7 +797,10 @@
             const x = cov[p] || {};
             const fav = x.fav || 0, url = x.url || 0, pend = x.pending || 0;
             const fn = x.favnull || 0, cn = x.confirmed_null || 0, un = x.unknown_null || 0;
-            set('cov_' + p + '_found', tot);      // 已查找：每平台都对全部歌曲执行了搜索
+            // v4.30.85：已查找改为真实口径 = 总数 - 待确认（该平台还没搜完的歌数）。
+            // 旧写法直接填 tot，搜索阶段就显示「810/810 已查找」，与顶部真实进度矛盾、严重误导。
+            // 补齐阶段 pend=0 时仍等于 tot，与原设计兼容。
+            set('cov_' + p + '_found', tot - pend);
             set('cov_' + p + '_tot_found', tot);
             set('cov_' + p + '_fav', fav);
             set('cov_' + p + '_url', url);
@@ -879,6 +947,7 @@
         // 重置实时表格（确保切到新任务时不会残留旧任务的行）
         v2LastMaxIdx = -1;
         v2TotalRendered = 0;
+        v2RenderCap = 500;
         if (v2RecentBody) {
             v2RecentBody.innerHTML = '<tr><td colspan="7" class="v2-recent-empty">加载中…</td></tr>';
         }

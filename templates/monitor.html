@@ -4,6 +4,24 @@
     <!-- 顶部红牌提醒（异动 / 待办）-->
     <div class="mon-alert-bar" id="monAlertBar" hidden></div>
 
+    <!-- 工具条：标题 + 使用导览 -->
+    <div class="mon-toolbar glass">
+        <div>
+            <h3 class="mon-toolbar-title">数据监控</h3>
+            <p class="mon-toolbar-sub">监测名单、每日数据、平台匹配，都在这里管。</p>
+        </div>
+    </div>
+    <!-- 吸顶锚点导航：点击跳转对应区块（v4.30.72） -->
+    <nav class="mon-anchor-nav" id="monAnchorNav">
+        <button class="mon-anchor active" data-target="#monStatGrid">📊 概览</button>
+        <button class="mon-anchor" data-target="#monReviewCard">🔎 待你确认</button>
+        <button class="mon-anchor" data-target="#monDailyCard">📊 每日采集</button>
+        <button class="mon-anchor" data-target="#monArchiveCard">📋 我的名单</button>
+        <button class="mon-anchor" data-target="#monSetupFold">🧰 建立流程</button>
+    </nav>
+
+    <!-- ══ 区块：今日概览 ══ -->
+    <div class="mon-zone-head"><span class="mon-zone-tag z-view">概览</span><span class="mon-zone-title">一眼看全</span></div>
     <!-- ── 概览卡片 ── -->
     <div class="mon-stat-grid" id="monStatGrid">
         <div class="mon-stat glass magnetic">
@@ -28,102 +46,13 @@
         </div>
     </div>
 
-    <!-- ── 步骤一：导入曲库 ── -->
-    <div class="mon-card glass">
-        <div class="mon-card-head">
-            <div class="mon-step-no">1</div>
-            <div>
-                <h3 class="mon-card-title">把歌曲名单导进来</h3>
-                <p class="mon-card-desc">支持 .xlsx / .csv。至少要有「歌曲名」，有歌手和词曲作者匹配会更准。</p>
-            </div>
-            <button class="btn-ghost mon-head-btn" id="monRefreshBtn" type="button">刷新状态</button>
-        </div>
-
-        <div class="mon-drop" id="monDrop">
-            <input type="file" id="monFile" accept=".xlsx,.xlsm,.xls,.csv,.txt,.tsv" hidden>
-            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <div class="mon-drop-title">把 Excel 拖进来，或点击选择文件</div>
-            <div class="mon-drop-sub" id="monDropSub">导入前会先给你看一眼识别结果，确认无误再入库</div>
-        </div>
-
-        <!-- 预览结果 -->
-        <div class="mon-preview" id="monPreview" hidden>
-            <div class="mon-preview-head">
-                <span class="mon-badge ok" id="monPvCount">—</span>
-                <span class="mon-preview-file" id="monPvFile"></span>
-            </div>
-            <div class="mon-map-grid" id="monPvMap"></div>
-            <div class="table-wrap glass mon-pv-table-wrap">
-                <table class="results-table mon-table" id="monPvTable">
-                    <thead><tr><th>歌曲名</th><th>歌手</th><th>作词</th><th>作曲</th><th>专辑</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <div class="mon-actions">
-                <button class="btn-primary" id="monImportBtn" type="button">确认导入</button>
-                <button class="btn-ghost" id="monPvCancel" type="button">取消</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── 步骤二：建档匹配 ── -->
-    <div class="mon-card glass">
-        <div class="mon-card-head">
-            <div class="mon-step-no">2</div>
-            <div>
-                <h3 class="mon-card-title">让机器去各平台找到对应的正版歌曲</h3>
-                <p class="mon-card-desc">拿歌名 + 歌手 + 词曲作者，去 QQ音乐 / 酷狗 / 网易云 找到官方原版并锁定 ID。找到的会被标上「✅ 正版」。</p>
-            </div>
-        </div>
-
-        <div class="mon-run-row">
-            <div class="mon-run-btns">
-                <button class="btn-primary" id="monMatchBtn" type="button">开始建档（只跑没建过的）</button>
-                <button class="btn-ghost" id="monRetryBtn" type="button">重试被限流的</button>
-                <button class="btn-ghost" id="monMatchAllBtn" type="button">全部重跑</button>
-            </div>
-            <div class="mon-workers">
-                并发
-                <select id="monWorkers">
-                    <option value="1">1（最稳）</option>
-                    <option value="2" selected>2（推荐）</option>
-                    <option value="3">3（快，可能被限流）</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="mon-progress" id="monProgress" hidden>
-            <div class="mon-progress-bar"><div class="mon-progress-fill" id="monProgressFill"></div></div>
-            <div class="mon-progress-text" id="monProgressText">准备中…</div>
-        </div>
-
-        <div class="mon-runs" id="monRuns"></div>
-    </div>
-
-    <!-- ── 步骤三：每日采集数据 ── -->
-    <div class="mon-card glass">
-        <div class="mon-card-head">
-            <div class="mon-step-no">3</div>
-            <div>
-                <h3 class="mon-card-title">每天采集一次数据</h3>
-                <p class="mon-card-desc">建档锁定后，每天拿 ID 去各平台取「收藏 / 在听 / 评论」数字，运营报告才有内容。建议每天点一次，或设置定时任务。</p>
-            </div>
-            <button class="btn-primary mon-head-btn" id="monDailyBtn" type="button">📊 立即采集今日数据</button>
-        </div>
-        <div class="mon-progress" id="monDailyProgress" hidden>
-            <div class="mon-progress-bar"><div class="mon-progress-fill" id="monDailyProgressFill"></div></div>
-            <div class="mon-progress-text" id="monDailyProgressText">准备中…</div>
-        </div>
-        <div class="mon-runs" id="monDailyRuns"></div>
-    </div>
+    <!-- ══ 区块：日常必办 ══ -->
+    <div class="mon-zone-head"><span class="mon-zone-tag z-daily">日常</span><span class="mon-zone-title">每天几分钟</span><span class="mon-zone-sub">处理待确认 → 采集今日数据</span></div>
 
     <!-- ── 步骤四：人工复核 ── -->
-    <div class="mon-card glass">
+    <div class="mon-card glass" id="monReviewCard">
         <div class="mon-card-head">
-            <div class="mon-step-no">4</div>
+            <div class="mon-card-ico">🔎</div>
             <div>
                 <h3 class="mon-card-title">机器拿不准的，你来确认</h3>
                 <p class="mon-card-desc">把握很高的机器已自动锁定为「✅ 正版」。这里只留机器不确定的——点对的卡片就锁定，或标「平台没有这首」。</p>
@@ -162,10 +91,30 @@
         <div class="mon-pager" id="monReviewPager" hidden></div>
     </div>
 
-    <!-- ── 档案浏览 ── -->
-    <div class="mon-card glass">
+    <!-- ── 步骤三：每日采集数据 ── -->
+    <div class="mon-card glass" id="monDailyCard">
         <div class="mon-card-head">
-            <div class="mon-step-no">5</div>
+            <div class="mon-card-ico">📊</div>
+            <div>
+                <h3 class="mon-card-title">每天采集一次数据</h3>
+                <p class="mon-card-desc">建档锁定后，每天拿 ID 去各平台取「收藏 / 在听 / 评论」数字，运营报告才有内容。建议每天点一次，或设置定时任务。</p>
+            </div>
+            <button class="btn-primary mon-head-btn" id="monDailyBtn" type="button">📊 立即采集今日数据</button>
+        </div>
+        <div class="mon-progress" id="monDailyProgress" hidden>
+            <div class="mon-progress-bar"><div class="mon-progress-fill" id="monDailyProgressFill"></div></div>
+            <div class="mon-progress-text" id="monDailyProgressText">准备中…</div>
+        </div>
+        <div class="mon-runs" id="monDailyRuns"></div>
+    </div>
+
+    <!-- ══ 区块：名单管理 ══ -->
+    <div class="mon-zone-head"><span class="mon-zone-tag z-arch">名单</span><span class="mon-zone-title">我的监控名单</span><span class="mon-zone-sub">查、筛、批量操作</span></div>
+
+    <!-- ── 档案浏览 ── -->
+    <div class="mon-card glass" id="monArchiveCard">
+        <div class="mon-card-head">
+            <div class="mon-card-ico">📋</div>
             <div>
                 <h3 class="mon-card-title">我的监控名单</h3>
                 <p class="mon-card-desc">
@@ -241,6 +190,88 @@
         <div class="mon-pager" id="monArchivePager" hidden></div>
     </div>
 
+
+    <!-- ══ 区块：建立流程（低频，折叠）══ -->
+    <details class="mon-zone-fold" id="monSetupFold">
+        <summary>🧰 建立流程 —— 导入名单 / 建档匹配（一次性的，平时收起）<span class="mon-fold-state" id="monFoldState"></span></summary>
+        <div class="mon-fold-body">
+<!-- ── 步骤一：导入曲库 ── -->
+    <div class="mon-card glass">
+        <div class="mon-card-head">
+            <div class="mon-step-no">1</div>
+            <div>
+                <h3 class="mon-card-title">把歌曲名单导进来</h3>
+                <p class="mon-card-desc">支持 .xlsx / .csv。至少要有「歌曲名」，有歌手和词曲作者匹配会更准。</p>
+            </div>
+            <button class="btn-ghost mon-head-btn" id="monRefreshBtn" type="button">刷新状态</button>
+        </div>
+
+        <div class="mon-drop" id="monDrop">
+            <input type="file" id="monFile" accept=".xlsx,.xlsm,.xls,.csv,.txt,.tsv" hidden>
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div class="mon-drop-title">把 Excel 拖进来，或点击选择文件</div>
+            <div class="mon-drop-sub" id="monDropSub">导入前会先给你看一眼识别结果，确认无误再入库</div>
+        </div>
+
+        <!-- 预览结果 -->
+        <div class="mon-preview" id="monPreview" hidden>
+            <div class="mon-preview-head">
+                <span class="mon-badge ok" id="monPvCount">—</span>
+                <span class="mon-preview-file" id="monPvFile"></span>
+            </div>
+            <div class="mon-map-grid" id="monPvMap"></div>
+            <div class="table-wrap glass mon-pv-table-wrap">
+                <table class="results-table mon-table" id="monPvTable">
+                    <thead><tr><th>歌曲名</th><th>歌手</th><th>作词</th><th>作曲</th><th>专辑</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="mon-actions">
+                <button class="btn-primary" id="monImportBtn" type="button">确认导入</button>
+                <button class="btn-ghost" id="monPvCancel" type="button">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 步骤二：建档匹配 ── -->
+    <div class="mon-card glass">
+        <div class="mon-card-head">
+            <div class="mon-step-no">2</div>
+            <div>
+                <h3 class="mon-card-title">让机器去各平台找到对应的正版歌曲</h3>
+                <p class="mon-card-desc">拿歌名 + 歌手 + 词曲作者，去 QQ音乐 / 酷狗 / 网易云 找到官方原版并锁定 ID。找到的会被标上「✅ 正版」。</p>
+            </div>
+        </div>
+
+        <div class="mon-run-row">
+            <div class="mon-run-btns">
+                <button class="btn-primary" id="monMatchBtn" type="button">开始建档（只跑没建过的）</button>
+                <button class="btn-ghost" id="monRetryBtn" type="button">重试被限流的</button>
+                <button class="btn-ghost" id="monMatchAllBtn" type="button">全部重跑</button>
+            </div>
+            <div class="mon-workers">
+                并发
+                <select id="monWorkers">
+                    <option value="1">1（最稳）</option>
+                    <option value="2" selected>2（推荐）</option>
+                    <option value="3">3（快，可能被限流）</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mon-progress" id="monProgress" hidden>
+            <div class="mon-progress-bar"><div class="mon-progress-fill" id="monProgressFill"></div></div>
+            <div class="mon-progress-text" id="monProgressText">准备中…</div>
+        </div>
+
+        <div class="mon-runs" id="monRuns"></div>
+    </div>
+
+            </div>
+    </details>
 </section>
 
 <!-- ═══ 运营报告标签页 ═══ -->
@@ -325,9 +356,20 @@
         <div class="rep-chart-body" id="repChartBody">
             <div class="rep-chart-empty" id="repChartEmpty"></div>
             <div class="rep-chart-content" id="repChartContent" hidden>
+                <div class="rep-chart-tools">
+                    <button class="btn-ghost" id="repChartCopy" type="button" title="复制为表格文本，可粘贴到微信 / Excel">📋 复制表格</button>
+                    <button class="btn-ghost" id="repChartExport" type="button" title="下载 xlsx（上榜歌曲 / 冲榜动态 / 榜单纪录 三个工作表）">⬇️ 导出 Excel</button>
+                    <span class="rep-chart-tools-tip" id="repChartToolsTip"></span>
+                </div>
                 <div class="rep-chart-section">
-                    <div class="rep-chart-h">榜单分组（只显示你监控的歌真实上榜的）· 按平台 &amp; 榜单</div>
+                    <div class="rep-chart-h">我司歌曲上榜 · 按平台 &amp; 榜单</div>
                     <div class="rep-list" id="repChartHits"></div>
+                </div>
+                <div class="rep-chart-section">
+                    <div class="rep-chart-h">🆕 同名/相似歌名雷达（榜单上出现的翻唱/盗版线索，歌手可不同）
+                        <button class="rep-mute-entry" id="radarMuteBtn" type="button" title="被屏蔽的歌曲不再出现在雷达里（按歌曲屏蔽，不影响监测库）">🔕 屏蔽名单 <span id="radarMuteCount"></span></button>
+                    </div>
+                    <div class="rep-list" id="repChartBoard"></div>
                 </div>
                 <div class="rep-chart-two">
                     <div class="rep-chart-section">
@@ -389,6 +431,19 @@
         <div class="modal-actions">
             <button class="modal-btn" id="monSongCancel" type="button">取消</button>
             <button class="modal-btn primary" id="monSongSave" type="button">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ 雷达屏蔽名单管理弹窗（v4.30.71） ═══ -->
+<div class="modal-overlay" id="radarMuteOverlay" hidden>
+    <div class="modal mon-link-modal">
+        <h3 class="modal-title">🔕 雷达屏蔽名单</h3>
+        <p class="modal-desc">被屏蔽的「歌名 + 榜单歌手」组合不再出现在雷达里。按歌曲维度屏蔽——不影响你的监测库，未来把同歌名的自家歌加进监测也照常正常提示。</p>
+        <div class="radar-mute-list" id="radarMuteList"></div>
+        <div class="modal-actions">
+            <button class="modal-btn" id="radarMuteClear" type="button">清空全部</button>
+            <button class="modal-btn primary" id="radarMuteClose" type="button">关闭</button>
         </div>
     </div>
 </div>
